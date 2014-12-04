@@ -122,51 +122,7 @@ public class DpiTsa {
 		logger.info("Initialized");
 	}
 
-	private void TagHosts(){
-		Set<HostNodeConnector> hosts = this.hostTracker.getAllHosts();
-		int i = 1001;
-		for(HostNodeConnector host:hosts){
 
-            Match match = new Match();
-           match.setField(new MatchField(MatchType.IN_PORT, host.getnodeConnector()));
-            List<Action> actions = new ArrayList<Action>();
-            actions.add(new PushVlan(EtherTypes.VLANTAGGED,0,0,i));
-            Flow flow = new Flow(match,actions);
-            flow.setHardTimeout((short) 360);
-            Status status = programmer.addFlow(host.getnodeconnectorNode(), flow);
-            if (!status.isSuccess()) {
-                logger.warn(
-                        "SDN Plugin failed to program the flow: {}. The failure is: {}",
-                        flow, status.getDescription());
-            }
-            else{
-            logger.info(String.format("add flow vlan %s to node %s",i,host.getnodeconnectorNode()));
-            }
-            i++;
-		}
-	}
-	
-	private void printShortestPaths() {
-		logger.info("graph data:");
-		Set<HostNodeConnector> hosts = this.hostTracker.getAllHosts();
-		logger.info(hosts.size() + " hosts found");
-		for (HostNodeConnector host1 : hosts) {
-			for (HostNodeConnector host2 : hosts) {
-				logger.info(String.format("%s -> %s:",
-						host1.getNetworkAddressAsString(),
-						host2.getNetworkAddressAsString()));
-				logger.info(routing.toString());
-				Path route = routing.getRoute(host1.getnodeconnectorNode(),
-						host2.getnodeconnectorNode());
-				if(route == null){
-					logger.info("hosts connected to the same switch");
-				}
-				else{
-				logger.info(route.toString());
-				}
-			}
-		}
-	}
 
 	/**
 	 * Function called by the dependency manager when at least one dependency
@@ -185,10 +141,16 @@ public class DpiTsa {
 	void start() {
 		logger.info("Started");
 		try {
-			printShortestPaths();
-			TagHosts();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
+			TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker, switchManager);
+			Map<Node, List<Flow>> flows = tsaGenerator.generateRules(new String[]{"10.0.0.3","10.0.0.1","10.0.0.2"});
+			for(Node node: flows.keySet()){
+				for(Flow flow: flows.get(node)){
+					programmer.addFlow(node, flow);
+					logger.info("add flow %s to node %s",flow,node);
+				}
+			}
+			
+		} catch (Exception e) {			
 			logger.error(e.getMessage());
 		}
 	}
