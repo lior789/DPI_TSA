@@ -36,7 +36,7 @@ import org.springframework.security.config.http.MatcherType;
  */
 public class TSAGenerator {
 	private static final Logger logger = LoggerFactory.getLogger(DpiTsa.class);
-	private static final int FIRST_VLAN_TAG = 300;
+	private static final short FIRST_VLAN_TAG = 300;
 	private IRouting _routing;
 	private IfIptoHost _hostTracker;
 	private ISwitchManager _switchManager;
@@ -50,25 +50,35 @@ public class TSAGenerator {
 
 	public Map<Node, List<Flow>> generateRules(String[] policyChain) {
 		List<Switch> switches = _switchManager.getNetworkDevices();
+		HashMap<Node, List<Flow>> result = initFlowTable(switches);
+		List<HostNodeConnector> policyChainHosts = findHosts(policyChain);
+		short vlanTag = FIRST_VLAN_TAG;
+
+		for (int i = 0; i < policyChainHosts.size(); i++) { // for each MB
+			HostNodeConnector host = policyChainHosts.get(i);			
+			if(i < policyChainHosts.size()-1){ //route from MB to the next MB (unless we reach the final mb)
+				HostNodeConnector nextHost = policyChainHosts.get(i+1);
+				Flow tagFlow = routeFromHostFlow(host,nextHost, vlanTag); 
+				result.get(host.getnodeconnectorNode()).add(tagFlow);
+			}
+			//else regular forwarding
+			for (Switch switchNode : switches) {
+				Flow routeFlow = routeToHostFlow(host, switchNode, vlanTag); //route to the next MB (tunnel)
+				result.get(switchNode.getNode()).add(routeFlow);
+			}
+			vlanTag++;
+		}
+		return result;
+
+	}
+
+	private HashMap<Node, List<Flow>> initFlowTable(List<Switch> switches) {
 		HashMap<Node, List<Flow>> result = new HashMap<Node, List<Flow>>();
 		// init result
 		for (Switch switchNode : switches) {
 			result.put(switchNode.getNode(), new ArrayList<Flow>());
 		}
-
-		List<HostNodeConnector> policyChainHosts = findHosts(policyChain);
-		int vlanTag = FIRST_VLAN_TAG - 1;
-
-		for (HostNodeConnector host : policyChainHosts) {
-			Flow tagFlow = setTagFromHostFlow(host, vlanTag);
-			result.get(host.getnodeconnectorNode()).add(tagFlow);
-			for (Switch switchNode : switches) {
-				Flow routeFlow = routeToHostFlow(host, switchNode, vlanTag);
-				result.get(switchNode.getNode()).add(routeFlow);
-			}
-		}
 		return result;
-
 	}
 	/**
 	 * 
@@ -78,15 +88,15 @@ public class TSAGenerator {
 	 * @return
 	 */
 	private Flow routeToHostFlow(HostNodeConnector host, Switch switchNode,
-			int vlanTag) {
+			short vlanTag) {
 		
 		Path route = _routing.getRoute(switchNode.getNode(), host.getnodeconnectorNode());
 		Match match = new Match();
-		if(vlanTag < FIRST_VLAN_TAG){ //route to first host
-			match.setField(new MatchField(MatchType.DL_VLAN,0));
+		if(vlanTag == FIRST_VLAN_TAG){ //route to first host
+			match.setField(new MatchField(MatchType.DL_VLAN,(short)(MatchType.DL_VLAN_NONE)));
 		}
-		else{ //route to next host by previous tag
-			match.setField(new MatchField(MatchType.DL_VLAN,0));
+		else{ //route to host by previous tag
+			match.setField(new MatchField(MatchType.DL_OUTER_VLAN,(short)(vlanTag-1)));
 		}
 		List<Action> actions = new ArrayList<Action>();
 		
@@ -96,17 +106,29 @@ public class TSAGenerator {
 		else{ // forward to destination host
 			actions.add(new Output(route.getEdges().get(0).getHeadNodeConnector()));
 		}
-		
-		return new Flow(match,actions);
+		Flow flow = new Flow(match,actions);
+		flow.setPriority((short)1);
+		return flow;
 
 	}
 
-	private Flow setTagFromHostFlow(HostNodeConnector host, int vlanTag) {		
+	private Flow routeFromHostFlow(HostNodeConnector host, HostNodeConnector nextHost, short vlanTag) {		
+		Path route = _routing.getRoute(host.getnodeconnectorNode(), nextHost.getnodeconnectorNode());
 		Match match = new Match();
 		match.setField(new MatchField(MatchType.IN_PORT, host.getnodeConnector()));
 		List<Action> actions = new ArrayList<Action>();
-		actions.add(new PushVlan(EtherTypes.VLANTAGGED, 0, 0, vlanTag));
+		PushVlan pushVlan = new PushVlan(EtherTypes.VLANTAGGED, 0, 0, vlanTag);
+		if(!pushVlan.isValid())
+			logger.info("not a valid action");
+		actions.add(pushVlan);
+		if(route == null){ //destination host is attached to switch
+			actions.add(new Output(nextHost.getnodeConnector()));
+		}
+		else{ // forward to destination host
+			actions.add(new Output(route.getEdges().get(0).getHeadNodeConnector()));
+		}
 		Flow flow = new Flow(match, actions);
+		flow.setPriority((short)2);
 		return flow;
 	}
 
@@ -115,14 +137,20 @@ public class TSAGenerator {
 		for (String mbAddress : policyChain) {
 			try {
 				HostNodeConnector host;
-				logger.info("looking for host %s ..", mbAddress);
-				host = _hostTracker.discoverHost(
-						InetAddress.getByName(mbAddress)).get();
-				logger.info("host %s found!", mbAddress);
-				policyChainHosts.add((HostNodeConnector) host);
+				logger.info(String.format("looking for host %s ..", mbAddress));
+				InetAddress hostAddress = InetAddress.getByName(mbAddress);
+				host = _hostTracker.discoverHost(hostAddress).get();
+				if(host != null){
+					logger.info(String.format("host %s found!", mbAddress));
+					policyChainHosts.add((HostNodeConnector) host);
+				}
+				else{
+					logger.error(String.format("host %s not found :(", mbAddress));
+				}
+				
 			} catch (Exception e) {
-				logger.error("Problem occoured while looking for host %s : %s",
-						mbAddress, e.getMessage());
+				logger.error(String.format("Problem occoured while looking for host %s : %s",
+						mbAddress, e.getMessage()));
 
 			}
 		}

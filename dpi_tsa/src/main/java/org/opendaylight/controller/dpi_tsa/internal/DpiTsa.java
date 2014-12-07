@@ -145,8 +145,13 @@ public class DpiTsa {
 			Map<Node, List<Flow>> flows = tsaGenerator.generateRules(new String[]{"10.0.0.3","10.0.0.1","10.0.0.2"});
 			for(Node node: flows.keySet()){
 				for(Flow flow: flows.get(node)){
-					programmer.addFlow(node, flow);
-					logger.info("add flow %s to node %s",flow,node);
+					Status status = programmer.addFlow(node, flow);
+					if(status.isSuccess()){
+						logger.info(String.format("install flow %s to node %s",flow,node));
+					}
+					else{
+						logger.error(String.format("error while adding flow %s to node %s : %s",flow,node, status.getDescription()));
+					}
 				}
 			}
 			
