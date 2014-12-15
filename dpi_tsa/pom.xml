@@ -7,10 +7,44 @@
     <version>1.0.0-SNAPSHOT</version>
     <relativePath>../commons/parent/</relativePath>
   </parent>
+
+  <groupId>org.sdnhub.odl</groupId>
   <artifactId>dpi_tsa</artifactId>
   <version>0.5.0-SNAPSHOT</version>
   <packaging>bundle</packaging>
-
+  
+  
+<pluginRepositories>
+ <pluginRepository>
+ <id>opendaylight-release</id>
+ <name>opendaylight-release</name>
+ <url>http://nexus.opendaylight.org/content/repositories/
+opendaylight.release/</url>
+ </pluginRepository>
+ <pluginRepository>
+ <id>opendaylight-snapshot</id>
+ <name>opendaylight-snapshot</name>
+ <url>http://nexus.opendaylight.org/content/repositories/
+opendaylight.snapshot/</url>
+ </pluginRepository>
+ </pluginRepositories>
+ <repositories>
+ <repository>
+ <id>opendaylight-release</id>
+ <name>opendaylight-release</name>
+ <url>http://nexus.opendaylight.org/content/repositories/
+opendaylight.release/</url>
+ </repository>
+ <repository>
+ <id>opendaylight-snapshot</id>
+ <name>opendaylight-snapshot</name>
+ <url>http://nexus.opendaylight.org/content/repositories/
+opendaylight.snapshot/</url>
+ </repository>
+</repositories>
+ 
+ 
+ 
   <scm>
     <connection>scm:git:ssh://git.opendaylight.org:29418/controller.git</connection>
     <developerConnection>scm:git:ssh://git.opendaylight.org:29418/controller.git</developerConnection>
@@ -28,10 +62,10 @@
         <configuration>
           <instructions>
             <Import-Package>
-             *
+              *
             </Import-Package>
             <Export-Package>
-              org.opendaylight.controller.dpi_tsa
+              org.opendaylight.controller.dpi-tsa
             </Export-Package>
             <Bundle-Activator>
               org.opendaylight.controller.dpi_tsa.internal.Activator
@@ -43,33 +77,21 @@
     </plugins>
   </build>
   <dependencies>
-      <!-- south bound plugins -->
-      <dependency>
-          <groupId>org.sdnhub.odl</groupId>
-          <artifactId>ofbroker</artifactId>
-          <version>0.1.0-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-          <groupId>org.sdnhub.odl</groupId>
-          <artifactId>protocol_plugins.openflow13</artifactId>
-          <version>0.1.0-SNAPSHOT</version>
-      </dependency>
-      <dependency>
-          <groupId>org.sdnhub.odl</groupId>
-          <artifactId>protocol_plugins.openflow10</artifactId>
-          <version>0.1.0-SNAPSHOT</version>
-      </dependency>
-
-      <!-- other modules -->
+  	  <dependency>
+      <groupId>org.opendaylight.controller</groupId>
+      <artifactId>hosttracker</artifactId>
+    </dependency>
+	  <dependency>
+      <groupId>org.opendaylight.controller</groupId>
+      <artifactId>topologymanager</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.opendaylight.controller</groupId>
       <artifactId>switchmanager</artifactId>
-      <version>0.5.0</version>
     </dependency>
     <dependency>
       <groupId>org.opendaylight.controller</groupId>
       <artifactId>sal</artifactId>
-      <version>0.5.0</version>
       </dependency>
       <dependency>
       <groupId>equinoxSDK381</groupId>
@@ -78,14 +100,6 @@
       <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      </dependency>
-      <dependency>
-      	<groupId>org.opendaylight.controller</groupId>
-      	<artifactId>topologymanager</artifactId>
-      </dependency>
-      <dependency>
-      	<groupId>org.opendaylight.controller</groupId>
-      	<artifactId>hosttracker</artifactId>
-      </dependency>
+    </dependency>
   </dependencies>
 </project>

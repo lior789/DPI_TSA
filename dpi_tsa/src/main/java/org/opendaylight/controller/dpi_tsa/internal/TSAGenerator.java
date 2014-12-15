@@ -15,6 +15,7 @@ import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
 import org.opendaylight.controller.sal.action.Action;
 import org.opendaylight.controller.sal.action.Output;
 import org.opendaylight.controller.sal.action.PushVlan;
+import org.opendaylight.controller.sal.action.SetVlanId;
 import org.opendaylight.controller.sal.core.Node;
 import org.opendaylight.controller.sal.core.Path;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
@@ -28,18 +29,17 @@ import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.switchmanager.Switch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.config.http.MatcherType;
 
 /**
  * @author ubuntu
- *
+ * 
  */
 public class TSAGenerator {
 	private static final Logger logger = LoggerFactory.getLogger(DpiTsa.class);
 	private static final short FIRST_VLAN_TAG = 300;
-	private IRouting _routing;
-	private IfIptoHost _hostTracker;
-	private ISwitchManager _switchManager;
+	private final IRouting _routing;
+	private final IfIptoHost _hostTracker;
+	private final ISwitchManager _switchManager;
 
 	public TSAGenerator(IRouting routing, IfIptoHost hostTracker,
 			ISwitchManager switchManager) {
@@ -55,17 +55,22 @@ public class TSAGenerator {
 		short vlanTag = FIRST_VLAN_TAG;
 
 		for (int i = 0; i < policyChainHosts.size(); i++) { // for each MB
-			HostNodeConnector host = policyChainHosts.get(i);			
-			if(i < policyChainHosts.size()-1){ //route from MB to the next MB (unless we reach the final mb)
-				HostNodeConnector nextHost = policyChainHosts.get(i+1);
-				Flow tagFlow = routeFromHostFlow(host,nextHost, vlanTag); 
+			HostNodeConnector host = policyChainHosts.get(i);
+			if (i < policyChainHosts.size() - 1) { // route from MB to the next
+													// MB (unless we reach the
+													// final mb)
+				HostNodeConnector nextHost = policyChainHosts.get(i + 1);
+				Flow tagFlow = routeFromHostFlow(host, nextHost, vlanTag);
 				result.get(host.getnodeconnectorNode()).add(tagFlow);
 			}
-			//else regular forwarding
+			// else regular forwarding
+
 			for (Switch switchNode : switches) {
-				Flow routeFlow = routeToHostFlow(host, switchNode, vlanTag); //route to the next MB (tunnel)
+				// route to the next MB (tunnel)
+				Flow routeFlow = routeToHostFlow(host, switchNode, vlanTag);
 				result.get(switchNode.getNode()).add(routeFlow);
 			}
+
 			vlanTag++;
 		}
 		return result;
@@ -80,6 +85,7 @@ public class TSAGenerator {
 		}
 		return result;
 	}
+
 	/**
 	 * 
 	 * @param host
@@ -89,46 +95,57 @@ public class TSAGenerator {
 	 */
 	private Flow routeToHostFlow(HostNodeConnector host, Switch switchNode,
 			short vlanTag) {
-		
-		Path route = _routing.getRoute(switchNode.getNode(), host.getnodeconnectorNode());
+
+		Path route = _routing.getRoute(switchNode.getNode(),
+				host.getnodeconnectorNode());
 		Match match = new Match();
-		if(vlanTag == FIRST_VLAN_TAG){ //route to first host
-			match.setField(new MatchField(MatchType.DL_VLAN,(short)(MatchType.DL_VLAN_NONE)));
-		}
-		else{ //route to host by previous tag
-			match.setField(new MatchField(MatchType.DL_OUTER_VLAN,(short)(vlanTag-1)));
+		if (vlanTag == FIRST_VLAN_TAG) { // route to first host
+			match.setField(new MatchField(MatchType.DL_VLAN,
+					(MatchType.DL_VLAN_NONE)));
+		} else { // route to host by previous tag
+			match.setField(new MatchField(MatchType.DL_VLAN,
+					(short) (vlanTag - 1)));
 		}
 		List<Action> actions = new ArrayList<Action>();
-		
-		if(route == null){ //destination host is attached to switch
+
+		if (route == null) { // destination host is attached to switch
 			actions.add(new Output(host.getnodeConnector()));
+		} else { // forward to destination host
+			actions.add(new Output(route.getEdges().get(0)
+					.getTailNodeConnector()));
 		}
-		else{ // forward to destination host
-			actions.add(new Output(route.getEdges().get(0).getHeadNodeConnector()));
-		}
-		Flow flow = new Flow(match,actions);
-		flow.setPriority((short)1);
+		Flow flow = new Flow(match, actions);
+		flow.setPriority((short) 1);
 		return flow;
 
 	}
 
-	private Flow routeFromHostFlow(HostNodeConnector host, HostNodeConnector nextHost, short vlanTag) {		
-		Path route = _routing.getRoute(host.getnodeconnectorNode(), nextHost.getnodeconnectorNode());
+	private Flow routeFromHostFlow(HostNodeConnector host,
+			HostNodeConnector nextHost, short vlanTag) {
+		Path route = _routing.getRoute(host.getnodeconnectorNode(),
+				nextHost.getnodeconnectorNode());
 		Match match = new Match();
-		match.setField(new MatchField(MatchType.IN_PORT, host.getnodeConnector()));
+		match.setField(new MatchField(MatchType.IN_PORT, host
+				.getnodeConnector()));
 		List<Action> actions = new ArrayList<Action>();
-		PushVlan pushVlan = new PushVlan(EtherTypes.VLANTAGGED, 0, 0, vlanTag);
-		if(!pushVlan.isValid())
-			logger.info("not a valid action");
-		actions.add(pushVlan);
-		if(route == null){ //destination host is attached to switch
-			actions.add(new Output(nextHost.getnodeConnector()));
+		Action action = null;
+		if (vlanTag == FIRST_VLAN_TAG) {
+			action = new PushVlan(EtherTypes.VLANTAGGED.intValue(), 0, 0,
+					vlanTag);
+		} else {
+			match.setField(new MatchField(MatchType.DL_VLAN,
+					(short) (vlanTag - 1)));
+			action = new SetVlanId(vlanTag);
 		}
-		else{ // forward to destination host
-			actions.add(new Output(route.getEdges().get(0).getHeadNodeConnector()));
+		actions.add(action);
+		if (route == null) { // destination host is attached to switch
+			actions.add(new Output(nextHost.getnodeConnector()));
+		} else { // forward to destination host
+			actions.add(new Output(route.getEdges().get(0)
+					.getTailNodeConnector()));
 		}
 		Flow flow = new Flow(match, actions);
-		flow.setPriority((short)2);
+		flow.setPriority((short) 2);
 		return flow;
 	}
 
@@ -140,16 +157,17 @@ public class TSAGenerator {
 				logger.info(String.format("looking for host %s ..", mbAddress));
 				InetAddress hostAddress = InetAddress.getByName(mbAddress);
 				host = _hostTracker.discoverHost(hostAddress).get();
-				if(host != null){
+				if (host != null) {
 					logger.info(String.format("host %s found!", mbAddress));
-					policyChainHosts.add((HostNodeConnector) host);
+					policyChainHosts.add(host);
+				} else {
+					logger.error(String.format("host %s not found :(",
+							mbAddress));
 				}
-				else{
-					logger.error(String.format("host %s not found :(", mbAddress));
-				}
-				
+
 			} catch (Exception e) {
-				logger.error(String.format("Problem occoured while looking for host %s : %s",
+				logger.error(String.format(
+						"Problem occoured while looking for host %s : %s",
 						mbAddress, e.getMessage()));
 
 			}

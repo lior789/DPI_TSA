@@ -23,8 +23,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
-import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
-import org.opendaylight.controller.protocol_plugin.openflow.internal.FlowProgrammerService;
 import org.opendaylight.controller.sal.action.*;
 import org.opendaylight.controller.sal.core.Edge;
 import org.opendaylight.controller.sal.core.Node;
@@ -40,7 +38,6 @@ import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 public class DpiTsa {
 	private static final Logger logger = LoggerFactory.getLogger(DpiTsa.class);
@@ -122,8 +119,6 @@ public class DpiTsa {
 		logger.info("Initialized");
 	}
 
-
-
 	/**
 	 * Function called by the dependency manager when at least one dependency
 	 * become unsatisfied or when the component is shutting down because for
@@ -141,21 +136,26 @@ public class DpiTsa {
 	void start() {
 		logger.info("Started");
 		try {
-			TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker, switchManager);
-			Map<Node, List<Flow>> flows = tsaGenerator.generateRules(new String[]{"10.0.0.3","10.0.0.1","10.0.0.2"});
-			for(Node node: flows.keySet()){
-				for(Flow flow: flows.get(node)){
+			TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker,
+					switchManager);
+			Map<Node, List<Flow>> flows = tsaGenerator
+					.generateRules(new String[] { "10.0.0.3", "10.0.0.1",
+							"10.0.0.2" });
+			for (Node node : flows.keySet()) {
+				for (Flow flow : flows.get(node)) {
 					Status status = programmer.addFlow(node, flow);
-					if(status.isSuccess()){
-						logger.info(String.format("install flow %s to node %s",flow,node));
-					}
-					else{
-						logger.error(String.format("error while adding flow %s to node %s : %s",flow,node, status.getDescription()));
+					if (status.isSuccess()) {
+						logger.info(String.format("install flow %s to node %s",
+								flow, node));
+					} else {
+						logger.error(String.format(
+								"error while adding flow %s to node %s : %s",
+								flow, node, status.getDescription()));
 					}
 				}
 			}
-			
-		} catch (Exception e) {			
+
+		} catch (Exception e) {
 			logger.error(e.getMessage());
 		}
 	}
