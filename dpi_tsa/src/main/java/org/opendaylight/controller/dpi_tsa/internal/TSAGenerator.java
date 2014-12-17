@@ -5,28 +5,31 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
-import org.opendaylight.controller.sal.action.Action;
-import org.opendaylight.controller.sal.action.Output;
-import org.opendaylight.controller.sal.action.PushVlan;
-import org.opendaylight.controller.sal.action.SetVlanId;
+import org.opendaylight.controller.sal.action.*;
 import org.opendaylight.controller.sal.core.Node;
+import org.opendaylight.controller.sal.core.NodeConnector;
+import org.opendaylight.controller.sal.core.NodeConnector.NodeConnectorIDType;
 import org.opendaylight.controller.sal.core.Path;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
-import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.sal.utils.EtherTypes;
+import org.opendaylight.controller.sal.utils.IPProtocols;
+import org.opendaylight.controller.sal.utils.NodeConnectorCreator;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.switchmanager.Switch;
+import org.openflow.protocol.OFPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +49,7 @@ public class TSAGenerator {
 		this._routing = routing;
 		this._hostTracker = hostTracker;
 		this._switchManager = switchManager;
+
 	}
 
 	public Map<Node, List<Flow>> generateRules(String[] policyChain) {
@@ -56,15 +60,13 @@ public class TSAGenerator {
 
 		for (int i = 0; i < policyChainHosts.size(); i++) { // for each MB
 			HostNodeConnector host = policyChainHosts.get(i);
-			if (i < policyChainHosts.size() - 1) { // route from MB to the next
-													// MB (unless we reach the
-													// final mb)
-				HostNodeConnector nextHost = policyChainHosts.get(i + 1);
-				Flow tagFlow = routeFromHostFlow(host, nextHost, vlanTag);
-				result.get(host.getnodeconnectorNode()).add(tagFlow);
+			HostNodeConnector nextHost = null;
+			if (i < policyChainHosts.size() - 1) {
+				nextHost = policyChainHosts.get(i + 1);
 			}
+			Flow tagFlow = routeFromHostFlow(host, nextHost, vlanTag);
+			result.get(host.getnodeconnectorNode()).add(tagFlow);
 			// else regular forwarding
-
 			for (Switch switchNode : switches) {
 				// route to the next MB (tunnel)
 				Flow routeFlow = routeToHostFlow(host, switchNode, vlanTag);
@@ -73,8 +75,27 @@ public class TSAGenerator {
 
 			vlanTag++;
 		}
+		// this is a workaround if we can match on NONE_VLAN we need to remove
+
+		for (Switch switchNode : switches) {
+			// regular routing (in this case just flood)
+			Flow routeFlow = AddFloodFlow(vlanTag - 1);
+			result.get(switchNode.getNode()).add(routeFlow);
+		}
+
 		return result;
 
+	}
+
+	private Flow AddFloodFlow(int vlanTag) {
+		Match match = new Match();
+		match.setField(new MatchField(MatchType.DL_VLAN, (short) (vlanTag - 1)));
+		Action flood = new FloodAll();
+		List<Action> actions = new ArrayList<Action>();
+		actions.add(flood);
+		Flow flow = new Flow(match, actions);
+		flow.setPriority((short) 2);
+		return flow;
 	}
 
 	private HashMap<Node, List<Flow>> initFlowTable(List<Switch> switches) {
@@ -95,58 +116,90 @@ public class TSAGenerator {
 	 */
 	private Flow routeToHostFlow(HostNodeConnector host, Switch switchNode,
 			short vlanTag) {
+		short priority = 2;
 
-		Path route = _routing.getRoute(switchNode.getNode(),
-				host.getnodeconnectorNode());
-		Match match = new Match();
+		Match match = matchICMP();
+		// route to first MB if no vlan exists
 		if (vlanTag == FIRST_VLAN_TAG) { // route to first host
 			match.setField(new MatchField(MatchType.DL_VLAN,
-					(MatchType.DL_VLAN_NONE)));
-		} else { // route to host by previous tag
+					MatchType.DL_VLAN_NONE)); // TODO: make this work!!!
+			priority = 1; // tmp workaround handle tagged packets first
+
+			// route to host by previous tag
+		} else {
 			match.setField(new MatchField(MatchType.DL_VLAN,
 					(short) (vlanTag - 1)));
 		}
-		List<Action> actions = new ArrayList<Action>();
 
-		if (route == null) { // destination host is attached to switch
-			actions.add(new Output(host.getnodeConnector()));
-		} else { // forward to destination host
-			actions.add(new Output(route.getEdges().get(0)
-					.getTailNodeConnector()));
-		}
+		List<Action> actions = new ArrayList<Action>();
+		Action output = outputToDest(switchNode, host);
+		actions.add(output);
 		Flow flow = new Flow(match, actions);
-		flow.setPriority((short) 1);
+		flow.setPriority(priority);
 		return flow;
 
 	}
 
-	private Flow routeFromHostFlow(HostNodeConnector host,
-			HostNodeConnector nextHost, short vlanTag) {
-		Path route = _routing.getRoute(host.getnodeconnectorNode(),
-				nextHost.getnodeconnectorNode());
-		Match match = new Match();
-		match.setField(new MatchField(MatchType.IN_PORT, host
+	private Flow routeFromHostFlow(HostNodeConnector currentMB,
+			HostNodeConnector nextMB, short vlanTag) {
+
+		short priority = 3;
+		Match match = matchICMP();
+		match.setField(new MatchField(MatchType.IN_PORT, currentMB
 				.getnodeConnector()));
+
 		List<Action> actions = new ArrayList<Action>();
-		Action action = null;
-		if (vlanTag == FIRST_VLAN_TAG) {
-			action = new PushVlan(EtherTypes.VLANTAGGED.intValue(), 0, 0,
-					vlanTag);
-		} else {
-			match.setField(new MatchField(MatchType.DL_VLAN,
-					(short) (vlanTag - 1)));
-			action = new SetVlanId(vlanTag);
-		}
+		Action action = new PushVlan(EtherTypes.VLANTAGGED.intValue(), 0, 0,
+				vlanTag);
 		actions.add(action);
-		if (route == null) { // destination host is attached to switch
-			actions.add(new Output(nextHost.getnodeConnector()));
-		} else { // forward to destination host
-			actions.add(new Output(route.getEdges().get(0)
-					.getTailNodeConnector()));
+		if (nextMB != null) { // last MB in chain
+			Action output = outputToDst(currentMB, nextMB);
+			actions.add(output);
+		} else {
+			NodeConnector table_loop = NodeConnectorCreator
+					.createOFNodeConnector(
+							(short) OFPort.OFPP_TABLE.getValue(),
+							currentMB.getnodeconnectorNode());
+			Action loopback = new Output(table_loop);
+			actions.add(loopback);
 		}
 		Flow flow = new Flow(match, actions);
-		flow.setPriority((short) 2);
+		flow.setPriority(priority);
 		return flow;
+	}
+
+	private Action outputToDest(Switch switchNode, HostNodeConnector host) {
+		Action output;
+		Path route = _routing.getRoute(switchNode.getNode(),
+				host.getnodeconnectorNode());
+		if (route == null) { // destination host is attached to switch
+			output = new Output(host.getnodeConnector());
+		} else { // forward to destination host
+			output = new Output(route.getEdges().get(0).getTailNodeConnector());
+		}
+		return output;
+	}
+
+	private Match matchICMP() {
+		Match match = new Match();
+		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
+				.shortValue()));
+		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
+				.byteValue()));
+		return match;
+	}
+
+	private Action outputToDst(HostNodeConnector host,
+			HostNodeConnector nextHost) {
+		Action result = null;
+		Path route = _routing.getRoute(host.getnodeconnectorNode(),
+				nextHost.getnodeconnectorNode());
+		if (route == null) { // destination host is attached to switch
+			result = new Output(nextHost.getnodeConnector());
+		} else { // forward to destination host
+			result = new Output(route.getEdges().get(0).getTailNodeConnector());
+		}
+		return result;
 	}
 
 	private List<HostNodeConnector> findHosts(String[] policyChain) {
