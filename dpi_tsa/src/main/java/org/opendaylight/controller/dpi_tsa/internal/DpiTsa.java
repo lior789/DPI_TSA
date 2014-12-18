@@ -18,21 +18,14 @@
 package org.opendaylight.controller.dpi_tsa.internal;
 
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Map;
-import java.util.Set;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
-import org.opendaylight.controller.sal.action.*;
-import org.opendaylight.controller.sal.core.Edge;
 import org.opendaylight.controller.sal.core.Node;
-import org.opendaylight.controller.sal.core.Path;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
 import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
-import org.opendaylight.controller.sal.match.*;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
 import org.opendaylight.controller.sal.routing.IRouting;
-import org.opendaylight.controller.sal.utils.EtherTypes;
 import org.opendaylight.controller.sal.utils.Status;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;

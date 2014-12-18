@@ -8,7 +8,6 @@
     <relativePath>../commons/parent/</relativePath>
   </parent>
 
-  <groupId>org.sdnhub.odl</groupId>
   <artifactId>dpi_tsa</artifactId>
   <version>0.5.0-SNAPSHOT</version>
   <packaging>bundle</packaging>
@@ -52,6 +51,34 @@ opendaylight.snapshot/</url>
   </scm>
 
   <build>
+    <pluginManagement>
+    <plugins>
+      <plugin>
+        <groupId>org.eclipse.m2e</groupId>
+        <artifactId>lifecycle-mapping</artifactId>
+        <version>1.0.0</version>
+        <configuration>
+          <lifecycleMappingMetadata>
+            <pluginExecutions>
+              <pluginExecution>
+                <pluginExecutionFilter>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-enforcer-plugin</artifactId>
+                  <versionRange>[1.0.0,)</versionRange>
+                  <goals>
+                    <goal>enforce</goal>
+                  </goals>
+                </pluginExecutionFilter>
+                <action>
+                  <ignore />
+                </action>
+              </pluginExecution>
+            </pluginExecutions>
+          </lifecycleMappingMetadata>
+        </configuration>
+      </plugin>
+    </plugins>
+  </pluginManagement>
     <plugins>
       <plugin>
         <groupId>org.apache.felix</groupId>
@@ -80,6 +107,11 @@ opendaylight.snapshot/</url>
   	<dependency>
 			<groupId>org.sdnhub.odl</groupId>
 			<artifactId>protocol_plugins.openflow13</artifactId>
+			<version>0.1.0-SNAPSHOT</version>
+	</dependency>
+	  	<dependency>
+			<groupId>org.sdnhub.odl</groupId>
+			<artifactId>protocol_plugins.openflow10</artifactId>
 			<version>0.1.0-SNAPSHOT</version>
 	</dependency>
 	<dependency>

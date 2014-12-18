@@ -8,20 +8,19 @@
 
 package org.opendaylight.controller.dpi_tsa.internal;
 
-import java.util.Hashtable;
 import java.util.Dictionary;
+import java.util.Hashtable;
 
 import org.apache.felix.dm.Component;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.sal.core.ComponentActivatorAbstractBase;
-import org.opendaylight.controller.sal.packet.IListenDataPacket;
+import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
 import org.opendaylight.controller.sal.routing.IRouting;
-import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Activator extends ComponentActivatorAbstractBase {
 	protected static final Logger logger = LoggerFactory
@@ -32,6 +31,7 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 * are done by the ComponentActivatorAbstractBase.
 	 * 
 	 */
+	@Override
 	public void init() {
 
 	}
@@ -41,6 +41,7 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 * ComponentActivatorAbstractBase
 	 * 
 	 */
+	@Override
 	public void destroy() {
 
 	}
@@ -54,6 +55,7 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 *         instantiated in order to get an fully working implementation
 	 *         Object
 	 */
+	@Override
 	public Object[] getImplementations() {
 		Object[] res = { DpiTsa.class };
 		return res;
@@ -74,6 +76,7 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 *            per-container different behavior if needed, usually should not
 	 *            be the case though.
 	 */
+	@Override
 	public void configureInstance(Component c, Object imp, String containerName) {
 		if (imp.equals(DpiTsa.class)) {
 			// export the services

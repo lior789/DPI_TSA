@@ -1,23 +1,18 @@
 package org.opendaylight.controller.dpi_tsa.internal;
 
-import java.net.Inet4Address;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
-import org.opendaylight.controller.sal.action.*;
+import org.opendaylight.controller.sal.action.Action;
+import org.opendaylight.controller.sal.action.FloodAll;
+import org.opendaylight.controller.sal.action.Output;
+import org.opendaylight.controller.sal.action.PushVlan;
 import org.opendaylight.controller.sal.core.Node;
-import org.opendaylight.controller.sal.core.NodeConnector;
-import org.opendaylight.controller.sal.core.NodeConnector.NodeConnectorIDType;
 import org.opendaylight.controller.sal.core.Path;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
 import org.opendaylight.controller.sal.match.Match;
@@ -26,10 +21,8 @@ import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.sal.utils.EtherTypes;
 import org.opendaylight.controller.sal.utils.IPProtocols;
-import org.opendaylight.controller.sal.utils.NodeConnectorCreator;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.switchmanager.Switch;
-import org.openflow.protocol.OFPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +33,7 @@ import org.slf4j.LoggerFactory;
 public class TSAGenerator {
 	private static final Logger logger = LoggerFactory.getLogger(DpiTsa.class);
 	private static final short FIRST_VLAN_TAG = 300;
+
 	private final IRouting _routing;
 	private final IfIptoHost _hostTracker;
 	private final ISwitchManager _switchManager;
@@ -89,7 +83,7 @@ public class TSAGenerator {
 
 	private Flow AddFloodFlow(int vlanTag) {
 		Match match = new Match();
-		match.setField(new MatchField(MatchType.DL_VLAN, (short) (vlanTag - 1)));
+		match.setField(new MatchField(MatchType.DL_VLAN, (short) (vlanTag)));
 		Action flood = new FloodAll();
 		List<Action> actions = new ArrayList<Action>();
 		actions.add(flood);
@@ -145,23 +139,23 @@ public class TSAGenerator {
 
 		short priority = 3;
 		Match match = matchICMP();
+		// handle packets arrived from currentMB
 		match.setField(new MatchField(MatchType.IN_PORT, currentMB
 				.getnodeConnector()));
 
 		List<Action> actions = new ArrayList<Action>();
+		// add vlan to those packets
 		Action action = new PushVlan(EtherTypes.VLANTAGGED.intValue(), 0, 0,
 				vlanTag);
 		actions.add(action);
+		// and send them to the next MB
 		if (nextMB != null) { // last MB in chain
 			Action output = outputToDst(currentMB, nextMB);
 			actions.add(output);
-		} else {
-			NodeConnector table_loop = NodeConnectorCreator
-					.createOFNodeConnector(
-							(short) OFPort.OFPP_TABLE.getValue(),
-							currentMB.getnodeconnectorNode());
-			Action loopback = new Output(table_loop);
-			actions.add(loopback);
+		} else {// TODO:last MB should pass control to default forwarding using
+				// OFPP_PORT
+			Action flood = new FloodAll();
+			actions.add(flood);
 		}
 		Flow flow = new Flow(match, actions);
 		flow.setPriority(priority);
