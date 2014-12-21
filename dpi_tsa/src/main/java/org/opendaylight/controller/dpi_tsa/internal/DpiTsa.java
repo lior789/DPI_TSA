@@ -24,8 +24,13 @@ import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.sal.core.Node;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
 import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
+import org.opendaylight.controller.sal.match.Match;
+import org.opendaylight.controller.sal.match.MatchField;
+import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
 import org.opendaylight.controller.sal.routing.IRouting;
+import org.opendaylight.controller.sal.utils.EtherTypes;
+import org.opendaylight.controller.sal.utils.IPProtocols;
 import org.opendaylight.controller.sal.utils.Status;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
@@ -131,9 +136,9 @@ public class DpiTsa {
 		try {
 			TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker,
 					switchManager);
-			Map<Node, List<Flow>> flows = tsaGenerator
-					.generateRules(new String[] { "10.0.0.3", "10.0.0.1",
-							"10.0.0.2" });
+			Map<Node, List<Flow>> flows = tsaGenerator.generateRules(
+					new String[] { "10.0.0.3", "10.0.0.1", "10.0.0.2" },
+					DpiTsa.generateTSAClassMatch());
 			for (Node node : flows.keySet()) {
 				for (Flow flow : flows.get(node)) {
 					Status status = programmer.addFlow(node, flow);
@@ -161,6 +166,21 @@ public class DpiTsa {
 	 */
 	void stop() {
 		logger.info("Stopped");
+	}
+
+	/**
+	 * return Match object representing the traffic that should traverse the TSA
+	 * currently ICMP hard-coded
+	 * 
+	 * @return
+	 */
+	private static Match generateTSAClassMatch() {
+		Match match = new Match();
+		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
+				.shortValue()));
+		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
+				.byteValue()));
+		return match;
 	}
 
 }
