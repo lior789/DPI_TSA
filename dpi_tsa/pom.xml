@@ -91,7 +91,7 @@ opendaylight.snapshot/</url>
               *
             </Import-Package>
             <Export-Package>
-              org.opendaylight.controller.dpi-tsa
+              org.opendaylight.controller.dpi_tsa
             </Export-Package>
             <Bundle-Activator>
               org.opendaylight.controller.dpi_tsa.internal.Activator
@@ -143,5 +143,9 @@ opendaylight.snapshot/</url>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
     </dependency>
+      <dependency>
+      	<groupId>com.google.code.gson</groupId>
+      	<artifactId>gson</artifactId>
+      	</dependency>
   </dependencies>
 </project>

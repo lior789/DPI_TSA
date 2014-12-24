@@ -16,6 +16,7 @@ import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.sal.core.ComponentActivatorAbstractBase;
 import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
+import org.opendaylight.controller.sal.packet.IListenDataPacket;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
@@ -57,7 +58,7 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 */
 	@Override
 	public Object[] getImplementations() {
-		Object[] res = { DpiTsa.class };
+		Object[] res = { SimpleTSAImpl.class, TsaListener.class };
 		return res;
 	}
 
@@ -78,12 +79,12 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 */
 	@Override
 	public void configureInstance(Component c, Object imp, String containerName) {
-		if (imp.equals(DpiTsa.class)) {
+		if (imp.equals(SimpleTSAImpl.class)) {
 			// export the services
 			Dictionary<String, String> props = new Hashtable<String, String>();
-			props.put("salListenerName", "tutorial_L2_forwarding");
-			// c.setInterface(new String[] { IListenDataPacket.class.getName()
-			// }, props);
+			props.put("salListenerName", "dpi_tsa");
+			c.setInterface(new String[] { IListenDataPacket.class.getName() },
+					props);
 
 			// register dependent modules
 			c.add(createContainerServiceDependency(containerName)

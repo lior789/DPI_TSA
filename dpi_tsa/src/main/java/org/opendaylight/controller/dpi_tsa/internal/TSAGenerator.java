@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
  * 
  */
 public class TSAGenerator {
-	static final Logger logger = LoggerFactory.getLogger(DpiTsa.class);
+	static final Logger logger = LoggerFactory.getLogger(SimpleTSAImpl.class);
 	private static final short FIRST_VLAN_TAG = 300;
 
 	private final IRouting _routing;
@@ -46,18 +46,16 @@ public class TSAGenerator {
 
 	/**
 	 * generate the flow need to be set in order to match the TSA policy
-	 * received pseudu-code: for each host(MB) in the chain: set vlan tag for
-	 * every packet that came from this MB forward the packet to the next MB for
-	 * every switch: forward the packet to the next host according to the vlan
-	 * tag
+	 * received pseudu-code: for each host in the chain: set tag for every
+	 * packet that came from this host forward the packet to the next host for
+	 * every switch: forward the packet to the next host according to the tag
 	 * 
-	 * - no vlan tag forward to the first host - last vlan tag supposed to
-	 * ignore and let regular forwarding take in (currently just flood) -every
-	 * flow is applied only to the received tsa class
+	 * - no tag forward to the first host - last tag supposed to ignore and let
+	 * regular forwarding take in (currently just flood) -every flow is applied
+	 * only to the received tsa class
 	 * 
 	 * @param policyChain
-	 *            ordered list of the Middlebox(IPs) each packet need to
-	 *            traverse
+	 *            ordered list of the hosts(IPs) each packet need to traverse
 	 * @return dictionary holds for every of node\switch the flows needs to be
 	 *         set
 	 */
@@ -69,7 +67,7 @@ public class TSAGenerator {
 				policyChain, _hostTracker);
 		short vlanTag = FIRST_VLAN_TAG;
 
-		for (int i = 0; i < policyChainHosts.size(); i++) { // for each MB
+		for (int i = 0; i < policyChainHosts.size(); i++) { // for each host
 			HostNodeConnector host = policyChainHosts.get(i);
 			HostNodeConnector nextHost = null;
 			if (i < policyChainHosts.size() - 1) {
@@ -116,9 +114,11 @@ public class TSAGenerator {
 		short priority = 2;
 
 		Match match = tsaClass.clone();
-		// route to first MB if no vlan exists
-		if (vlanTag == FIRST_VLAN_TAG) { // route to first host
-			match.setField(FlowUtils.generateMatchOnTag(0));
+		// route to first host if no tag exists
+		if (vlanTag == 0) { // route to first host
+			match.setField(FlowUtils.generateMatchOnTag(0)); // TODO: make this
+																// work (match
+																// no tag)
 			priority = 1; // tmp workaround handle tagged packets first
 
 			// route to host by previous tag
@@ -135,35 +135,36 @@ public class TSAGenerator {
 	}
 
 	/**
-	 * generate flow that tags a packet coming from the middlebox and passes it
-	 * to the next middlebox last middle box (nextMB == null) passes control to
-	 * Standard routing - currently flood
+	 * generate flow that tags a packet coming from the currenthost and passes
+	 * it to the nextHost lasthost (nextHost == null) passes control to Standard
+	 * routing - currently flood
 	 * 
-	 * @param currentMB
-	 * @param nextMB
-	 * @param vlanTag
+	 * @param currentHost
+	 * @param nextHost
+	 * @param tag
 	 * @return
 	 */
-	private Flow generateRouteFromHostFlow(HostNodeConnector currentMB,
-			HostNodeConnector nextMB, short vlanTag, Match tsaClass) {
+	private Flow generateRouteFromHostFlow(HostNodeConnector currentHost,
+			HostNodeConnector nextHost, short tag, Match tsaClass) {
 
 		short priority = 3;
 		Match match = tsaClass.clone();
 
-		// handle packets arrived from currentMB
-		match.setField(new MatchField(MatchType.IN_PORT, currentMB
+		// handle packets arrived from currentHos
+		match.setField(new MatchField(MatchType.IN_PORT, currentHost
 				.getnodeConnector()));
 
 		List<Action> actions = new ArrayList<Action>();
-		// add vlan to those packets
-		Action action = FlowUtils.generateTagAction(vlanTag);
+		// add tag to those packets
+		Action action = FlowUtils.generateTagAction(tag);
 		actions.add(action);
-		// and send them to the next MB
-		if (nextMB != null) { // last MB in chain
-			Action output = outputToDst(currentMB.getnodeconnectorNode(),
-					nextMB);
+		// and send them to the next host
+		if (nextHost != null) { // last host in chain
+			Action output = outputToDst(currentHost.getnodeconnectorNode(),
+					nextHost);
 			actions.add(output);
-		} else {// TODO:last MB should pass control to default forwarding using
+		} else {// TODO:last host should pass control to default forwarding
+				// using
 				// OFPP_PORT
 			Action flood = new FloodAll();
 			actions.add(flood);
