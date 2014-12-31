@@ -8,6 +8,7 @@ import java.util.Map;
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
 import org.opendaylight.controller.sal.action.Action;
+import org.opendaylight.controller.sal.action.Drop;
 import org.opendaylight.controller.sal.action.FloodAll;
 import org.opendaylight.controller.sal.action.Output;
 import org.opendaylight.controller.sal.core.Node;
@@ -17,6 +18,7 @@ import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.routing.IRouting;
+import org.opendaylight.controller.sal.utils.EtherTypes;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.switchmanager.Switch;
 import org.slf4j.Logger;
@@ -87,14 +89,15 @@ public class TSAGenerator {
 
 			vlanTag++;
 		}
-		// this is a workaround if we can match on NONE_VLAN we need to remove
-
-		for (Switch switchNode : switches) {
-			// regular routing (in this case just flood)
-			Flow routeFlow = generateFloodFlow(vlanTag - 1, TSAClass);
-			result.get(switchNode.getNode()).add(routeFlow);
-		}
-
+		// this is a workaround because we cannot match on NONE_VLAN
+		// we need to handle forwarding ourself
+		// below there is just flooding of the last vlan. i prefer to drop after
+		// last host
+		/**
+		 * for (Switch switchNode : switches) { // regular routing (in this case
+		 * just flood) Flow routeFlow = generateFloodFlow(vlanTag - 1,
+		 * TSAClass); result.get(switchNode.getNode()).add(routeFlow); }
+		 **/
 		return result;
 
 	}
@@ -116,20 +119,15 @@ public class TSAGenerator {
 		Match match = tsaClass.clone();
 		// route to first host if no tag exists
 		if (vlanTag == 0) { // route to first host
-			match.setField(FlowUtils.generateMatchOnTag(0)); // TODO: make this
-																// work (match
-																// no tag)
 			priority = 1; // tmp workaround handle tagged packets first
-
-			// route to host by previous tag
-		} else {
-			match.setField(FlowUtils.generateMatchOnTag(vlanTag));
 		}
+		FlowUtils.setFields(match, FlowUtils.generateMatchOnTag(vlanTag));
 		List<Action> actions = new ArrayList<Action>();
 		Action output = outputToDst(switchNode.getNode(), host);
 		actions.add(output);
 		Flow flow = new Flow(match, actions);
 		flow.setPriority(priority);
+
 		return flow;
 
 	}
@@ -163,11 +161,11 @@ public class TSAGenerator {
 			Action output = outputToDst(currentHost.getnodeconnectorNode(),
 					nextHost);
 			actions.add(output);
-		} else {// TODO:last host should pass control to default forwarding
-				// using
-				// OFPP_PORT
-			Action flood = new FloodAll();
-			actions.add(flood);
+		} else {
+			// TODO:last host should pass control to default forwarding
+			// using OFPP_PORT, for now just drop
+			Action drop = new Drop();
+			actions.add(drop);
 		}
 		Flow flow = new Flow(match, actions);
 		flow.setPriority(priority);
@@ -211,7 +209,7 @@ public class TSAGenerator {
 	 */
 	static Flow generateFloodFlow(int tag, Match tsaClass) {
 		Match match = tsaClass.clone();
-		match.setField(FlowUtils.generateMatchOnTag(tag));
+		FlowUtils.setFields(match, FlowUtils.generateMatchOnTag(tag));
 		Action flood = new FloodAll();
 		List<Action> actions = new ArrayList<Action>();
 		actions.add(flood);

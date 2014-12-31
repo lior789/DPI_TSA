@@ -52,7 +52,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	private IRouting routing = null;
 	private IfIptoHost hostTracker = null;
 	private TsaListener _tsaListener;
-	private String[] _policyChain;
+	private String[] _lastPolicyChain;
 	private Map<Node, List<Flow>> _flows = null;
 
 	/**
@@ -83,7 +83,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	 */
 	@Override
 	public void applyPolicyChain(String[] policyChain) {
-		if (Arrays.equals(policyChain, _policyChain)) {
+		if (Arrays.equals(policyChain, _lastPolicyChain)) {
 			logger.warn("policy chain already exists: "
 					+ Arrays.toString(policyChain));
 			return;
@@ -92,6 +92,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 			logger.warn("got empty policy chain - clean rules ");
 			removeFlows(_flows);
 			_flows = null;
+			_lastPolicyChain = policyChain;
 			return;
 		}
 		logger.info("applying chain: " + Arrays.toString(policyChain));
@@ -102,7 +103,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 			_flows = tsaGenerator.generateRules(policyChain,
 					SimpleTSAImpl.generateTSAClassMatch());
 			programFlows(_flows);
-			_policyChain = policyChain;
+			_lastPolicyChain = policyChain;
 
 		} catch (Exception e) {
 			logger.error(e.getMessage());
@@ -126,6 +127,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		for (Node node : flows.keySet()) {
 			for (Flow flow : flows.get(node)) {
 				Status status = programmer.addFlow(node, flow);
+
 				if (status.isSuccess()) {
 					logger.info(String.format("install flow %s to node %s",
 							flow, node));
