@@ -1,4 +1,4 @@
-package org.opendaylight.controller.dpi_tsa.internal;
+package org.opendaylight.dpi_tsa.internal;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -39,21 +39,20 @@ public class FlowUtils {
 	 * IP list the method uses the host tacker service received on the
 	 * constructor
 	 * 
-	 * @param hosts
+	 * @param policyChain
 	 * @param hostTarcker
 	 *            TODO
 	 * @return
 	 */
-	static List<HostNodeConnector> findHosts(String[] hosts,
+	static List<HostNodeConnector> findHosts(List<InetAddress> policyChain,
 			IfIptoHost hostTarcker) {
 		List<HostNodeConnector> policyChainHosts = new ArrayList<HostNodeConnector>();
-		for (String mbAddress : hosts) {
+		for (InetAddress mbAddress : policyChain) {
 			try {
 				HostNodeConnector host;
 				TSAGenerator.logger.info(String.format(
 						"looking for host %s ..", mbAddress));
-				InetAddress hostAddress = InetAddress.getByName(mbAddress);
-				host = hostTarcker.discoverHost(hostAddress).get();
+				host = hostTarcker.discoverHost(mbAddress).get();
 				if (host != null) {
 					TSAGenerator.logger.info(String.format("host %s found!",
 							mbAddress));

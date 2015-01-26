@@ -1,5 +1,6 @@
-package org.opendaylight.controller.dpi_tsa.internal;
+package org.opendaylight.dpi_tsa.internal;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +19,6 @@ import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.routing.IRouting;
-import org.opendaylight.controller.sal.utils.EtherTypes;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.switchmanager.Switch;
 import org.slf4j.Logger;
@@ -61,7 +61,7 @@ public class TSAGenerator {
 	 * @return dictionary holds for every of node\switch the flows needs to be
 	 *         set
 	 */
-	public Map<Node, List<Flow>> generateRules(String[] policyChain,
+	public Map<Node, List<Flow>> generateRules(List<InetAddress> policyChain,
 			Match TSAClass) {
 		List<Switch> switches = _switchManager.getNetworkDevices();
 		HashMap<Node, List<Flow>> result = initFlowTable(switches);

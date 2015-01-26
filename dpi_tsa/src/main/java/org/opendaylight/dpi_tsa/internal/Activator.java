@@ -6,17 +6,13 @@
  * and is available at http://www.eclipse.org/legal/epl-v10.html
  */
 
-package org.opendaylight.controller.dpi_tsa.internal;
-
-import java.util.Dictionary;
-import java.util.Hashtable;
+package org.opendaylight.dpi_tsa.internal;
 
 import org.apache.felix.dm.Component;
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.sal.core.ComponentActivatorAbstractBase;
 import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
-import org.opendaylight.controller.sal.packet.IListenDataPacket;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
@@ -24,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class Activator extends ComponentActivatorAbstractBase {
+
 	protected static final Logger logger = LoggerFactory
 			.getLogger(Activator.class);
 
@@ -58,7 +55,7 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 */
 	@Override
 	public Object[] getImplementations() {
-		Object[] res = { SimpleTSAImpl.class, TsaListener.class };
+		Object[] res = { SimpleTSAImpl.class };
 		return res;
 	}
 
@@ -79,13 +76,14 @@ public class Activator extends ComponentActivatorAbstractBase {
 	 */
 	@Override
 	public void configureInstance(Component c, Object imp, String containerName) {
-		if (imp.equals(SimpleTSAImpl.class)) {
-			// export the services
-			Dictionary<String, String> props = new Hashtable<String, String>();
-			props.put("salListenerName", "dpi_tsa");
-			c.setInterface(new String[] { IListenDataPacket.class.getName() },
-					props);
 
+		// if (imp.equals(OpenFlowListener.class)) {
+		// Dictionary<String, String> props = new Hashtable<String, String>();
+		// props.put("salListenerName", "dpi_tsa");
+		// c.setInterface(new String[] { IListenDataPacket.class.getName() },
+		// props);
+		// }
+		if (imp.equals(SimpleTSAImpl.class)) {
 			// register dependent modules
 			c.add(createContainerServiceDependency(containerName)
 					.setService(ISwitchManager.class)

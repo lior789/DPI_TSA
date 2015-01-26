@@ -15,9 +15,13 @@
  *
  */
 
-package org.opendaylight.controller.dpi_tsa.internal;
+package org.opendaylight.dpi_tsa.internal;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -29,20 +33,21 @@ import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
-import org.opendaylight.controller.sal.packet.IListenDataPacket;
-import org.opendaylight.controller.sal.packet.PacketResult;
-import org.opendaylight.controller.sal.packet.RawPacket;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.sal.utils.EtherTypes;
 import org.opendaylight.controller.sal.utils.IPProtocols;
 import org.opendaylight.controller.sal.utils.Status;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
+import org.opendaylight.dpi_tsa.ITrafficSteeringService;
+import org.opendaylight.dpi_tsa.listener.TSAListener;
+import org.opendaylight.dpi_tsa.listener.TsaSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class SimpleTSAImpl implements ITrafficSteeringService,
-		IListenDataPacket {
+import Common.Protocol.TSA.RawPolicyChain;
+
+public class SimpleTSAImpl implements ITrafficSteeringService {
 	private static final Logger logger = LoggerFactory
 			.getLogger(SimpleTSAImpl.class);
 	private ISwitchManager switchManager = null;
@@ -51,9 +56,10 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	private ITopologyManager topologyManager = null;
 	private IRouting routing = null;
 	private IfIptoHost hostTracker = null;
-	private TsaListener _tsaListener;
-	private String[] _lastPolicyChain;
+	private List<RawPolicyChain> _currentPolicyChain;
 	private Map<Node, List<Flow>> _flows = null;
+	private Map<String, Match> _trafficClasses;
+	private TSAListener _listener;
 
 	/**
 	 * Function called by dependency manager after "init ()" is called and after
@@ -62,16 +68,51 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	 */
 	void start() {
 		logger.info("Started");
-		_tsaListener = new TsaListener();
-		_tsaListener.setTsService(this);
-		_tsaListener.setDataPacketService(this.dataPacketService);
-		_tsaListener.setSwitchManager(this.switchManager);
-		_tsaListener.setFlowProgrammer(this.programmer);
-		_tsaListener.start();
-		/**
-		 * String[] policyChain = new String[] { "10.0.0.3", "10.0.0.1",
-		 * "10.0.0.2" }; applyPolicyChain(policyChain);
-		 **/
+		_trafficClasses = new HashMap<String, Match>();
+		applyPolicyChain(generateInitialPolicyChains());
+		_listener.start();
+	}
+
+	private List<RawPolicyChain> generateInitialPolicyChains() {
+		List<RawPolicyChain> result = new LinkedList<RawPolicyChain>();
+		RawPolicyChain tmp = new RawPolicyChain();
+		tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.2]";
+		Match match = new Match();
+		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
+				.shortValue()));
+		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
+				.byteValue()));
+		try {
+			match.setField(new MatchField(MatchType.NW_DST, InetAddress
+					.getByName("10.0.0.2")));
+
+			_trafficClasses.put(tmp.trafficClass, match);
+
+			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.3"),
+					InetAddress.getByName("10.0.0.5"),
+					InetAddress.getByName("10.0.0.2"));
+
+			result.add(tmp);
+
+			tmp = new RawPolicyChain();
+			tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.3]";
+			match = new Match();
+			match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
+					.shortValue()));
+			match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
+					.byteValue()));
+			match.setField(new MatchField(MatchType.NW_DST, InetAddress
+					.getByName("10.0.0.3")));
+			_trafficClasses.put(tmp.trafficClass, match);
+			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.6"),
+					InetAddress.getByName("10.0.0.2"),
+					InetAddress.getByName("10.0.0.3"));
+			result.add(tmp);
+			return result;
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 	/**
@@ -82,32 +123,34 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	 *            traverse (currently only ICMP)
 	 */
 	@Override
-	public void applyPolicyChain(String[] policyChain) {
-		if (Arrays.equals(policyChain, _lastPolicyChain)) {
-			logger.warn("policy chain already exists: "
-					+ Arrays.toString(policyChain));
+	public void applyPolicyChain(List<RawPolicyChain> policyChains) {
+		if (policyChains.equals(_currentPolicyChain)) {
+			logger.warn("policy chain already exists: " + policyChains);
 			return;
 		}
-		if (policyChain.length == 0) {
+		if (policyChains.size() == 0) {
 			logger.warn("got empty policy chain - clean rules ");
 			removeFlows(_flows);
 			_flows = null;
-			_lastPolicyChain = policyChain;
+			_currentPolicyChain = policyChains;
 			return;
 		}
-		logger.info("applying chain: " + Arrays.toString(policyChain));
-		try {
-			TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker,
-					switchManager);
-			removeFlows(_flows);
-			_flows = tsaGenerator.generateRules(policyChain,
-					SimpleTSAImpl.generateTSAClassMatch());
+		logger.info("applying chain: " + policyChains);
+		TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker,
+				switchManager);
+		removeFlows(_flows);
+		for (RawPolicyChain policyChain : policyChains) {
+			Match trafficMatch = getTSAClassMatch(policyChain.trafficClass);
+			_flows = tsaGenerator
+					.generateRules(policyChain.chain, trafficMatch);
 			programFlows(_flows);
-			_lastPolicyChain = policyChain;
-
-		} catch (Exception e) {
-			logger.error(e.getMessage());
 		}
+
+		_currentPolicyChain = policyChains;
+	}
+
+	private Match getTSAClassMatch(String trafficClass) {
+		return _trafficClasses.get(trafficClass);
 	}
 
 	private void removeFlows(Map<Node, List<Flow>> flows) {
@@ -147,23 +190,48 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	 * 
 	 */
 	void stop() {
+		_listener.stop();
 		logger.info("Stopped");
 	}
 
 	/**
-	 * return Match object representing the traffic that should traverse the TSA
-	 * currently ICMP hard-coded
+	 * Function called by the dependency manager when all the required
+	 * dependencies are satisfied
 	 * 
-	 * @return
 	 */
-	private static Match generateTSAClassMatch() {
-		Match match = new Match();
-		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
-				.shortValue()));
-		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
-				.byteValue()));
-		return match;
+	void init() {
+		_listener = new TsaSocketListener();
+		_listener.setTSA(this);
+		_listener.init();
+		logger.info("Initialized");
 	}
+
+	/**
+	 * Function called by the dependency manager when at least one dependency
+	 * become unsatisfied or when the component is shutting down because for
+	 * example bundle is being stopped.
+	 * 
+	 */
+	void destroy() {
+		removeFlows(_flows);
+	}
+
+	// /**
+	// * return Match object representing the traffic that should traverse the
+	// TSA
+	// * currently ICMP hard-coded
+	// *
+	// * @param trafficClass
+	// *
+	// * @return
+	// */
+	// private static Match generateTSAClassMatch(String trafficClass) {
+	// OFMatch ofMatch = OFMatch.fromString(trafficClass);
+	// FlowConverter convertor = new FlowConverter(ofMatch,
+	// new LinkedList<OFAction>());
+	// Flow flow = convertor.getFlow(null);
+	// return flow.getMatch();
+	// }
 
 	void setHostTracker(IfIptoHost s) {
 		this.hostTracker = s;
@@ -227,28 +295,9 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		}
 	}
 
-	/**
-	 * Function called by the dependency manager when all the required
-	 * dependencies are satisfied
-	 * 
-	 */
-	void init() {
-		logger.info("Initialized");
-	}
-
-	/**
-	 * Function called by the dependency manager when at least one dependency
-	 * become unsatisfied or when the component is shutting down because for
-	 * example bundle is being stopped.
-	 * 
-	 */
-	void destroy() {
-		removeFlows(_flows);
-	}
-
 	@Override
-	public PacketResult receiveDataPacket(RawPacket inPkt) {
-		return this._tsaListener.receiveDataPacket(inPkt);
+	public List<RawPolicyChain> getPolicyChains() {
+		return _currentPolicyChain;
 	}
 
 }
