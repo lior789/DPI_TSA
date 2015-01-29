@@ -3,16 +3,18 @@ package org.opendaylight.dpi_tsa.internal;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
 import org.opendaylight.controller.sal.action.Action;
-import org.opendaylight.controller.sal.action.Drop;
 import org.opendaylight.controller.sal.action.FloodAll;
 import org.opendaylight.controller.sal.action.Output;
 import org.opendaylight.controller.sal.core.Node;
+import org.opendaylight.controller.sal.core.NodeConnector;
 import org.opendaylight.controller.sal.core.Path;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
 import org.opendaylight.controller.sal.match.Match;
@@ -62,42 +64,41 @@ public class TSAGenerator {
 	 *         set
 	 */
 	public Map<Node, List<Flow>> generateRules(List<InetAddress> policyChain,
-			Match TSAClass) {
+			Match tsaClass) {
 		List<Switch> switches = _switchManager.getNetworkDevices();
 		HashMap<Node, List<Flow>> result = initFlowTable(switches);
 		List<HostNodeConnector> policyChainHosts = FlowUtils.findHosts(
 				policyChain, _hostTracker);
 		short vlanTag = FIRST_VLAN_TAG;
 
-		for (int i = 0; i < policyChainHosts.size(); i++) { // for each host
+		for (int i = 0; i < policyChainHosts.size(); i++) { // for each chain
+															// node
 			HostNodeConnector host = policyChainHosts.get(i);
 			HostNodeConnector nextHost = null;
 			if (i < policyChainHosts.size() - 1) {
 				nextHost = policyChainHosts.get(i + 1);
+				Flow tagFlow = generateRouteFromHostFlow(host, nextHost,
+						vlanTag, tsaClass);
+				result.get(host.getnodeconnectorNode()).add(tagFlow);
 			}
-			Flow tagFlow = generateRouteFromHostFlow(host, nextHost, vlanTag,
-					TSAClass);
-			result.get(host.getnodeconnectorNode()).add(tagFlow);
 			// else regular forwarding
 			for (Switch switchNode : switches) {
 				// route to the next MB (tunnel)
+				if (vlanTag == FIRST_VLAN_TAG) {
+					List<Flow> firstHostFlows = generateRouteToFirstHostFlow(
+							host, switchNode, (short) (vlanTag - 1), tsaClass,
+							policyChainHosts);
+					result.get(switchNode.getNode()).addAll(firstHostFlows);
+				}
+
 				Flow routeFlow = generateRouteToHostFlow(host, switchNode,
-						vlanTag == FIRST_VLAN_TAG ? 0 : (short) (vlanTag - 1),
-						TSAClass);
+						(short) (vlanTag - 1), tsaClass);
 				result.get(switchNode.getNode()).add(routeFlow);
 			}
 
 			vlanTag++;
 		}
-		// this is a workaround because we cannot match on NONE_VLAN
-		// we need to handle forwarding ourself
-		// below there is just flooding of the last vlan. i prefer to drop after
-		// last host
-		/**
-		 * for (Switch switchNode : switches) { // regular routing (in this case
-		 * just flood) Flow routeFlow = generateFloodFlow(vlanTag - 1,
-		 * TSAClass); result.get(switchNode.getNode()).add(routeFlow); }
-		 **/
+
 		return result;
 
 	}
@@ -114,22 +115,43 @@ public class TSAGenerator {
 	 */
 	private Flow generateRouteToHostFlow(HostNodeConnector host,
 			Switch switchNode, short vlanTag, Match tsaClass) {
-		short priority = 2;
-
-		Match match = tsaClass.clone();
-		// route to first host if no tag exists
-		if (vlanTag == 0) { // route to first host
-			priority = 1; // tmp workaround handle tagged packets first
-		}
-		FlowUtils.setFields(match, FlowUtils.generateMatchOnTag(vlanTag));
+		short priority = 9;
 		List<Action> actions = new ArrayList<Action>();
+		Match match = tsaClass.clone();
+		FlowUtils.setFields(match, FlowUtils.generateMatchOnTag(vlanTag));
 		Action output = outputToDst(switchNode.getNode(), host);
 		actions.add(output);
 		Flow flow = new Flow(match, actions);
 		flow.setPriority(priority);
 
 		return flow;
+	}
 
+	private List<Flow> generateRouteToFirstHostFlow(HostNodeConnector host,
+			Switch switchNode, short vlanTag, Match tsaClass,
+			List<HostNodeConnector> policyChainHosts) {
+		List<Flow> result = new LinkedList<Flow>();
+		short priority = 8;
+
+		Set<NodeConnector> nodeConnectors = FlowUtils.getSwitchHosts(
+				switchNode, _hostTracker);
+		// if middelbox can initate messages need to remove this
+		nodeConnectors
+				.removeAll(FlowUtils.getHostsConnectors(policyChainHosts));
+
+		for (NodeConnector nodeConnector : nodeConnectors) {
+			Match match = tsaClass.clone();
+			List<Action> actions = new ArrayList<Action>();
+			actions.add(FlowUtils.generateTagAction(vlanTag));
+			actions.add(outputToDst(switchNode.getNode(), host));
+			FlowUtils.setFields(match,
+					FlowUtils.generateMatchOnConnector(nodeConnector));
+			Flow flow = new Flow(match, actions);
+			flow.setPriority(priority);
+			result.add(flow);
+		}
+
+		return result;
 	}
 
 	/**
@@ -145,28 +167,22 @@ public class TSAGenerator {
 	private Flow generateRouteFromHostFlow(HostNodeConnector currentHost,
 			HostNodeConnector nextHost, short tag, Match tsaClass) {
 
-		short priority = 3;
+		short priority = 10;
 		Match match = tsaClass.clone();
 
 		// handle packets arrived from currentHos
 		match.setField(new MatchField(MatchType.IN_PORT, currentHost
 				.getnodeConnector()));
-
+		// if middelbox can initiate messages need to match on vlan also
+		// (assuming middlbox not striping vlan)
 		List<Action> actions = new ArrayList<Action>();
 		// add tag to those packets
 		Action action = FlowUtils.generateTagAction(tag);
 		actions.add(action);
 		// and send them to the next host
-		if (nextHost != null) { // last host in chain
-			Action output = outputToDst(currentHost.getnodeconnectorNode(),
-					nextHost);
-			actions.add(output);
-		} else {
-			// TODO:last host should pass control to default forwarding
-			// using OFPP_PORT, for now just drop
-			Action drop = new Drop();
-			actions.add(drop);
-		}
+		Action output = outputToDst(currentHost.getnodeconnectorNode(),
+				nextHost);
+		actions.add(output);
 		Flow flow = new Flow(match, actions);
 		flow.setPriority(priority);
 		return flow;

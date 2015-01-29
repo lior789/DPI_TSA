@@ -2,17 +2,23 @@ package org.opendaylight.dpi_tsa.internal;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
 import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
 import org.opendaylight.controller.sal.action.Action;
 import org.opendaylight.controller.sal.action.PushVlan;
+import org.opendaylight.controller.sal.core.NodeConnector;
 import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.utils.EtherTypes;
+import org.opendaylight.controller.switchmanager.Switch;
 
 public class FlowUtils {
 
@@ -94,6 +100,30 @@ public class FlowUtils {
 		for (MatchField matchField : matchFields) {
 			match.setField(matchField);
 		}
+	}
+
+	public static List<MatchField> generateMatchOnConnector(
+			NodeConnector nodeConnector) {
+		return Arrays.asList(new MatchField(MatchType.IN_PORT, nodeConnector));
+	}
+
+	public static Set<NodeConnector> getSwitchHosts(Switch switchNode,
+			IfIptoHost hostTracker) {
+		Set<HostNodeConnector> hosts = hostTracker.getAllHosts();
+		Set<NodeConnector> hostsNodeConnectors = new HashSet<>(
+				getHostsConnectors(hosts));
+
+		Set<NodeConnector> nodeConnectors = switchNode.getNodeConnectors();
+		hostsNodeConnectors.retainAll(nodeConnectors);
+		return hostsNodeConnectors;
+	}
+
+	public static Collection<NodeConnector> getHostsConnectors(
+			Collection<HostNodeConnector> hosts) {
+		Set<NodeConnector> hostsNodeConnectors = new HashSet<NodeConnector>();
+		for (HostNodeConnector host : hosts)
+			hostsNodeConnectors.add(host.getnodeConnector());
+		return hostsNodeConnectors;
 	}
 
 }

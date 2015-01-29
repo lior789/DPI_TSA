@@ -57,7 +57,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 	private IRouting routing = null;
 	private IfIptoHost hostTracker = null;
 	private List<RawPolicyChain> _currentPolicyChain;
-	private Map<Node, List<Flow>> _flows = null;
+	private List<Map<Node, List<Flow>>> _flows = null;
 	private Map<String, Match> _trafficClasses;
 	private TSAListener _listener;
 
@@ -68,6 +68,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 	 */
 	void start() {
 		logger.info("Started");
+		_flows = new LinkedList<Map<Node, List<Flow>>>();
 		_trafficClasses = new HashMap<String, Match>();
 		applyPolicyChain(generateInitialPolicyChains());
 		_listener.start();
@@ -76,7 +77,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 	private List<RawPolicyChain> generateInitialPolicyChains() {
 		List<RawPolicyChain> result = new LinkedList<RawPolicyChain>();
 		RawPolicyChain tmp = new RawPolicyChain();
-		tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.2]";
+		tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.7]";
 		Match match = new Match();
 		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
 				.shortValue()));
@@ -84,7 +85,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 				.byteValue()));
 		try {
 			match.setField(new MatchField(MatchType.NW_DST, InetAddress
-					.getByName("10.0.0.2")));
+					.getByName("10.0.0.7")));
 
 			_trafficClasses.put(tmp.trafficClass, match);
 
@@ -95,14 +96,14 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 			result.add(tmp);
 
 			tmp = new RawPolicyChain();
-			tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.3]";
+			tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.8]";
 			match = new Match();
 			match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
 					.shortValue()));
 			match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
 					.byteValue()));
 			match.setField(new MatchField(MatchType.NW_DST, InetAddress
-					.getByName("10.0.0.3")));
+					.getByName("10.0.0.8")));
 			_trafficClasses.put(tmp.trafficClass, match);
 			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.6"),
 					InetAddress.getByName("10.0.0.2"),
@@ -141,9 +142,11 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 		removeFlows(_flows);
 		for (RawPolicyChain policyChain : policyChains) {
 			Match trafficMatch = getTSAClassMatch(policyChain.trafficClass);
-			_flows = tsaGenerator
-					.generateRules(policyChain.chain, trafficMatch);
-			programFlows(_flows);
+			Map<Node, List<Flow>> chainsFlows = tsaGenerator.generateRules(
+					policyChain.chain, trafficMatch);
+			programFlows(chainsFlows);
+			_flows.add(chainsFlows);
+
 		}
 
 		_currentPolicyChain = policyChains;
@@ -153,17 +156,17 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 		return _trafficClasses.get(trafficClass);
 	}
 
-	private void removeFlows(Map<Node, List<Flow>> flows) {
-		if (flows == null) {
-			return;
-		}
+	private void removeFlows(List<Map<Node, List<Flow>>> flowsList) {
 		logger.info("remove old rules");
-		for (Node node : flows.keySet()) {
-			for (Flow flow : flows.get(node)) {
-				programmer.removeFlow(node, flow);
+		for (Map<Node, List<Flow>> flows : flowsList) {
+			for (Node node : flows.keySet()) {
+				for (Flow flow : flows.get(node)) {
+					programmer.removeFlow(node, flow);
+				}
 			}
-
 		}
+		_flows.clear();
+
 	}
 
 	private void programFlows(Map<Node, List<Flow>> flows) {
