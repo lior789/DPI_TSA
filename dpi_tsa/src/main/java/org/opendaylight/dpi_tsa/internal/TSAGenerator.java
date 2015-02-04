@@ -13,6 +13,7 @@ import org.opendaylight.controller.hosttracker.hostAware.HostNodeConnector;
 import org.opendaylight.controller.sal.action.Action;
 import org.opendaylight.controller.sal.action.FloodAll;
 import org.opendaylight.controller.sal.action.Output;
+import org.opendaylight.controller.sal.action.PopVlan;
 import org.opendaylight.controller.sal.core.Node;
 import org.opendaylight.controller.sal.core.NodeConnector;
 import org.opendaylight.controller.sal.core.Path;
@@ -119,12 +120,21 @@ public class TSAGenerator {
 		List<Action> actions = new ArrayList<Action>();
 		Match match = tsaClass.clone();
 		FlowUtils.setFields(match, FlowUtils.generateMatchOnTag(vlanTag));
+		if (isHostDirectlyConnected(host, switchNode)) {
+			actions.add(new PopVlan());
+		}
 		Action output = outputToDst(switchNode.getNode(), host);
 		actions.add(output);
+
 		Flow flow = new Flow(match, actions);
 		flow.setPriority(priority);
 
 		return flow;
+	}
+
+	private boolean isHostDirectlyConnected(HostNodeConnector host,
+			Switch switchNode) {
+		return switchNode.getNodeConnectors().contains(host.getnodeConnector());
 	}
 
 	private List<Flow> generateRouteToFirstHostFlow(HostNodeConnector host,
@@ -133,16 +143,17 @@ public class TSAGenerator {
 		List<Flow> result = new LinkedList<Flow>();
 		short priority = 8;
 
-		Set<NodeConnector> nodeConnectors = FlowUtils.getSwitchHosts(
-				switchNode, _hostTracker);
+		Set<NodeConnector> regularHosts = FlowUtils.getSwitchHosts(switchNode,
+				_hostTracker);
 		// if middelbox can initate messages need to remove this
-		nodeConnectors
-				.removeAll(FlowUtils.getHostsConnectors(policyChainHosts));
+		regularHosts.removeAll(FlowUtils.getHostsConnectors(policyChainHosts));
 
-		for (NodeConnector nodeConnector : nodeConnectors) {
+		for (NodeConnector nodeConnector : regularHosts) {
 			Match match = tsaClass.clone();
 			List<Action> actions = new ArrayList<Action>();
-			actions.add(FlowUtils.generateTagAction(vlanTag));
+			if (!isHostDirectlyConnected(host, switchNode)) {
+				actions.add(FlowUtils.generateTagAction(vlanTag));
+			}
 			actions.add(outputToDst(switchNode.getNode(), host));
 			FlowUtils.setFields(match,
 					FlowUtils.generateMatchOnConnector(nodeConnector));
@@ -177,8 +188,9 @@ public class TSAGenerator {
 		// (assuming middlbox not striping vlan)
 		List<Action> actions = new ArrayList<Action>();
 		// add tag to those packets
-		Action action = FlowUtils.generateTagAction(tag);
-		actions.add(action);
+		if (!isHostsConnectedDirectly(currentHost, nextHost)) {
+			actions.add(FlowUtils.generateTagAction(tag));
+		}
 		// and send them to the next host
 		Action output = outputToDst(currentHost.getnodeconnectorNode(),
 				nextHost);
@@ -188,10 +200,17 @@ public class TSAGenerator {
 		return flow;
 	}
 
+	private boolean isHostsConnectedDirectly(HostNodeConnector currentHost,
+			HostNodeConnector nextHost) {
+		return nextHost.getnodeconnectorNode().equals(
+				currentHost.getnodeconnectorNode());
+	}
+
 	/**
 	 * returns actions that forward the packets arriving into the sw to the
 	 * nextHost this method this action should be set to the switch attached to
 	 * the host uses the routing service from constructor
+	 * 
 	 * 
 	 * @param host
 	 * @param nextHost
