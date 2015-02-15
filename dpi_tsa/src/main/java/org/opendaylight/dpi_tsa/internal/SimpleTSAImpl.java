@@ -39,6 +39,7 @@ import org.opendaylight.controller.sal.utils.IPProtocols;
 import org.opendaylight.controller.sal.utils.Status;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
+import org.opendaylight.dpi_tsa.ConfigurationHelper;
 import org.opendaylight.dpi_tsa.ITrafficSteeringService;
 import org.opendaylight.dpi_tsa.listener.TSAListener;
 import org.opendaylight.dpi_tsa.listener.TsaSocketListener;
@@ -70,50 +71,15 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 		logger.info("Started");
 		_flows = new LinkedList<Map<Node, List<Flow>>>();
 		_trafficClasses = new HashMap<String, Match>();
-		applyPolicyChain(generateInitialPolicyChains());
+		applyPolicyChain(getInitialPolicyChains());
 		_listener.start();
 	}
 
-	private List<RawPolicyChain> generateInitialPolicyChains() {
-		List<RawPolicyChain> result = new LinkedList<RawPolicyChain>();
-		RawPolicyChain tmp = new RawPolicyChain();
-		tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.7]";
-		Match match = new Match();
-		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
-				.shortValue()));
-		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
-				.byteValue()));
-		try {
-			match.setField(new MatchField(MatchType.NW_DST, InetAddress
-					.getByName("10.0.0.7")));
+	private List<RawPolicyChain> getInitialPolicyChains() {
+		List<RawPolicyChain> policyChainsConfig = new ConfigurationHelper()
+				.getPolicyChainsConfig();
+		return policyChainsConfig;
 
-			_trafficClasses.put(tmp.trafficClass, match);
-
-			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.3"),
-					InetAddress.getByName("10.0.0.5"),
-					InetAddress.getByName("10.0.0.2"));
-
-			result.add(tmp);
-
-			tmp = new RawPolicyChain();
-			tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.8]";
-			match = new Match();
-			match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
-					.shortValue()));
-			match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
-					.byteValue()));
-			match.setField(new MatchField(MatchType.NW_DST, InetAddress
-					.getByName("10.0.0.8")));
-			_trafficClasses.put(tmp.trafficClass, match);
-			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.6"),
-					InetAddress.getByName("10.0.0.2"),
-					InetAddress.getByName("10.0.0.3"));
-			result.add(tmp);
-			return result;
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
-		}
-		return null;
 	}
 
 	/**
@@ -141,7 +107,9 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 				switchManager);
 		removeFlows(_flows);
 		for (RawPolicyChain policyChain : policyChains) {
-			Match trafficMatch = getTSAClassMatch(policyChain.trafficClass);
+			Match trafficMatch = FlowUtils.parseMatch(policyChain.trafficClass);
+			// Match trafficMatch =
+			// _trafficClasses.get(policyChain.trafficClass);
 			Map<Node, List<Flow>> chainsFlows = tsaGenerator.generateRules(
 					policyChain.chain, trafficMatch);
 			programFlows(chainsFlows);
@@ -150,10 +118,6 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 		}
 
 		_currentPolicyChain = policyChains;
-	}
-
-	private Match getTSAClassMatch(String trafficClass) {
-		return _trafficClasses.get(trafficClass);
 	}
 
 	private void removeFlows(List<Map<Node, List<Flow>>> flowsList) {
@@ -218,23 +182,6 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 	void destroy() {
 		removeFlows(_flows);
 	}
-
-	// /**
-	// * return Match object representing the traffic that should traverse the
-	// TSA
-	// * currently ICMP hard-coded
-	// *
-	// * @param trafficClass
-	// *
-	// * @return
-	// */
-	// private static Match generateTSAClassMatch(String trafficClass) {
-	// OFMatch ofMatch = OFMatch.fromString(trafficClass);
-	// FlowConverter convertor = new FlowConverter(ofMatch,
-	// new LinkedList<OFAction>());
-	// Flow flow = convertor.getFlow(null);
-	// return flow.getMatch();
-	// }
 
 	void setHostTracker(IfIptoHost s) {
 		this.hostTracker = s;
@@ -301,6 +248,48 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 	@Override
 	public List<RawPolicyChain> getPolicyChains() {
 		return _currentPolicyChain;
+	}
+
+	private List<RawPolicyChain> generateInitialPolicyChains() {
+		List<RawPolicyChain> result = new LinkedList<RawPolicyChain>();
+		RawPolicyChain tmp = new RawPolicyChain();
+		tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.7]";
+		Match match = new Match();
+		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
+				.shortValue()));
+		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
+				.byteValue()));
+		try {
+			match.setField(new MatchField(MatchType.NW_DST, InetAddress
+					.getByName("10.0.0.7")));
+
+			_trafficClasses.put(tmp.trafficClass, match);
+
+			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.3"),
+					InetAddress.getByName("10.0.0.5"),
+					InetAddress.getByName("10.0.0.2"));
+
+			result.add(tmp);
+
+			tmp = new RawPolicyChain();
+			tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.8]";
+			match = new Match();
+			match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
+					.shortValue()));
+			match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
+					.byteValue()));
+			match.setField(new MatchField(MatchType.NW_DST, InetAddress
+					.getByName("10.0.0.8")));
+			_trafficClasses.put(tmp.trafficClass, match);
+			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.6"),
+					InetAddress.getByName("10.0.0.2"),
+					InetAddress.getByName("10.0.0.3"));
+			result.add(tmp);
+			return result;
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 }

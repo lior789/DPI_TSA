@@ -18,7 +18,11 @@ import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.utils.EtherTypes;
+import org.opendaylight.controller.sal.utils.NetUtils;
 import org.opendaylight.controller.switchmanager.Switch;
+import org.openflow.protocol.OFMatch;
+import org.openflow.protocol.OFOXMFieldType;
+import org.openflow.protocol.OFVlanId;
 
 public class FlowUtils {
 
@@ -126,4 +130,74 @@ public class FlowUtils {
 		return hostsNodeConnectors;
 	}
 
+	/**
+	 * return Match object representing the traffic that should traverse the TSA
+	 * currently ICMP hard-coded
+	 * 
+	 * @param trafficClass
+	 * 
+	 * @return
+	 */
+	static Match parseMatch(String trafficClass) {
+		OFMatch match = OFMatch.fromString(trafficClass);
+		Match result = convertOFMatch(match);
+		return result;
+	}
+
+	private static Match convertOFMatch(OFMatch ofMatch) {
+
+		Match salMatch = new Match();
+
+		if (ofMatch.getDataLayerSource() != null
+				&& !NetUtils.isZeroMAC(ofMatch.getDataLayerSource())) {
+			byte srcMac[] = ofMatch.getDataLayerSource();
+			salMatch.setField(new MatchField(MatchType.DL_SRC, srcMac.clone()));
+		}
+		if (ofMatch.getDataLayerDestination() != null
+				&& !NetUtils.isZeroMAC(ofMatch.getDataLayerDestination())) {
+			byte dstMac[] = ofMatch.getDataLayerDestination();
+			salMatch.setField(new MatchField(MatchType.DL_DST, dstMac.clone()));
+		}
+		if (ofMatch.fieldExists(OFOXMFieldType.ETH_TYPE)) {
+			salMatch.setField(new MatchField(MatchType.DL_TYPE, ofMatch
+					.getDataLayerType()));
+		}
+		short vlan = ofMatch.getDataLayerVirtualLan();
+		if (vlan != OFVlanId.OFPVID_NONE.getValue()) {
+			salMatch.setField(new MatchField(MatchType.DL_VLAN, vlan));
+		}
+		if (ofMatch.fieldExists(OFOXMFieldType.VLAN_PCP)) {
+			salMatch.setField(MatchType.DL_VLAN_PR,
+					ofMatch.getDataLayerVirtualLanPriorityCodePoint());
+		}
+		if (ofMatch.getNetworkSource() != 0) {
+			salMatch.setField(MatchType.NW_SRC,
+					NetUtils.getInetAddress(ofMatch.getNetworkSource()),
+					NetUtils.getInetAddress(ofMatch.getNetworkSourceMask()));
+		}
+		if (ofMatch.getNetworkDestination() != 0) {
+			salMatch.setField(MatchType.NW_DST, NetUtils.getInetAddress(ofMatch
+					.getNetworkDestination()), NetUtils.getInetAddress(ofMatch
+					.getNetworkDestinationMask()));
+		}
+		if (ofMatch.fieldExists(OFOXMFieldType.IP_DSCP)) {
+			salMatch.setField(MatchType.NW_TOS,
+					NetUtils.getUnsignedByte(ofMatch.getNetworkTypeOfService()));
+		}
+		if (ofMatch.fieldExists(OFOXMFieldType.IP_PROTO)) {
+			salMatch.setField(MatchType.NW_PROTO, ofMatch.getNetworkProtocol());
+		}
+		if (ofMatch.fieldExists(OFOXMFieldType.TCP_SRC)
+				|| ofMatch.fieldExists(OFOXMFieldType.UDP_SRC)
+				|| ofMatch.fieldExists(OFOXMFieldType.SCTP_SRC)) {
+			salMatch.setField(MatchType.TP_SRC, ofMatch.getTransportSource());
+		}
+		if (ofMatch.fieldExists(OFOXMFieldType.TCP_DST)
+				|| ofMatch.fieldExists(OFOXMFieldType.UDP_DST)
+				|| ofMatch.fieldExists(OFOXMFieldType.SCTP_DST)) {
+			salMatch.setField(MatchType.TP_DST,
+					ofMatch.getTransportDestination());
+		}
+		return salMatch;
+	}
 }

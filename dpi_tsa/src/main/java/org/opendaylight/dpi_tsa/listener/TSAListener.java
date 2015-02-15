@@ -91,36 +91,4 @@ public abstract class TSAListener {
 		this._tsa = tsa;
 	}
 
-	// private List<RawPolicyChain> parsePolicyChainsConfig(String
-	// chainsConfigFile) {
-	// List<RawPolicyChain> result = null;
-	// logger.debug("configuration is in: " + chainsConfigFile);
-	// try {
-	// SAXReader reader = new SAXReader();
-	// Document document = reader.read(new File(chainsConfigFile));
-	// Element rootElement = document.getRootElement();
-	// result = new LinkedList<RawPolicyChain>();
-	// for (Iterator i = rootElement.elementIterator(); i.hasNext();) {
-	// RawPolicyChain tmp = new RawPolicyChain();
-	// Element element = (Element) i.next();
-	// String matchStr = element.element("TrafficClass")
-	// .getStringValue();
-	// tmp.trafficClass = matchStr;
-	// tmp.chain = new LinkedList<InetAddress>();
-	// Iterator hosts = element.element("Hosts").elementIterator();
-	// for (; hosts.hasNext();) {
-	// Element hostElement = (Element) hosts;
-	// InetAddress hostAddress = InetAddress.getByName(hostElement
-	// .getStringValue());
-	// tmp.chain.add(hostAddress);
-	// }
-	// result.add(tmp);
-	// }
-	// } catch (Exception e) {
-	// logger.error("error while reading configuration: " + e.getMessage());
-	// }
-	// return result;
-	//
-	// }
-
 }

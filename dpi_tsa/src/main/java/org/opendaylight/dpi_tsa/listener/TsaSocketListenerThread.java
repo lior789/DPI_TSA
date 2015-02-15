@@ -9,6 +9,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 
+import org.opendaylight.dpi_tsa.ConfigurationHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,9 +32,10 @@ public class TsaSocketListenerThread extends Thread {
 		_running = true;
 		try {
 			_serverSocket = new ServerSocket();
-
+			ConfigurationHelper config = new ConfigurationHelper();
 			_serverSocket.bind(new InetSocketAddress(Inet4Address
-					.getByName("10.0.0.101"), PORT));
+					.getByName(config.getProperty("listener.address")), Short
+					.valueOf(config.getProperty("listener.port"))));
 		} catch (IOException e) {
 			logger.error("Failed to start listener: " + e.getMessage());
 			e.printStackTrace();
