@@ -46,7 +46,7 @@ import org.opendaylight.dpi_tsa.listener.TsaSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import Common.Protocol.TSA.RawPolicyChain;
+import Common.Protocol.RawPolicyChain;
 
 public class SimpleTSAImpl implements ITrafficSteeringService {
 	private static final Logger logger = LoggerFactory

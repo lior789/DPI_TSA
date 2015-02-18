@@ -2,7 +2,7 @@ package org.opendaylight.dpi_tsa;
 
 import java.util.List;
 
-import Common.Protocol.TSA.RawPolicyChain;
+import Common.Protocol.RawPolicyChain;
 
 public interface ITrafficSteeringService {
 
