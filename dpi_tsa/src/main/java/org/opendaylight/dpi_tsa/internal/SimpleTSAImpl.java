@@ -39,7 +39,8 @@ import org.opendaylight.controller.sal.utils.IPProtocols;
 import org.opendaylight.controller.sal.utils.Status;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
-import org.opendaylight.dpi_tsa.ConfigurationHelper;
+import org.opendaylight.dpi_tsa.ConfigChangedDelegation;
+import org.opendaylight.dpi_tsa.ConfigurationManager;
 import org.opendaylight.dpi_tsa.ITrafficSteeringService;
 import org.opendaylight.dpi_tsa.listener.TSAListener;
 import org.opendaylight.dpi_tsa.listener.TsaSocketListener;
@@ -48,7 +49,8 @@ import org.slf4j.LoggerFactory;
 
 import Common.Protocol.RawPolicyChain;
 
-public class SimpleTSAImpl implements ITrafficSteeringService {
+public class SimpleTSAImpl implements ITrafficSteeringService,
+		ConfigChangedDelegation {
 	private static final Logger logger = LoggerFactory
 			.getLogger(SimpleTSAImpl.class);
 	private ISwitchManager switchManager = null;
@@ -61,6 +63,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 	private List<Map<Node, List<Flow>>> _flows = null;
 	private Map<String, Match> _trafficClasses;
 	private TSAListener _listener;
+	private ConfigurationManager _config;
 
 	/**
 	 * Function called by dependency manager after "init ()" is called and after
@@ -71,12 +74,15 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 		logger.info("Started");
 		_flows = new LinkedList<Map<Node, List<Flow>>>();
 		_trafficClasses = new HashMap<String, Match>();
-		applyPolicyChain(getInitialPolicyChains());
+		_config = ConfigurationManager.getInstance();
+		_config.setPolicyChangedDelegation(this);
+		applyPolicyChain(getConfigPolicyChains());
 		_listener.start();
 	}
 
-	private List<RawPolicyChain> getInitialPolicyChains() {
-		List<RawPolicyChain> policyChainsConfig = new ConfigurationHelper()
+	private List<RawPolicyChain> getConfigPolicyChains() {
+
+		List<RawPolicyChain> policyChainsConfig = _config
 				.getPolicyChainsConfig();
 		return policyChainsConfig;
 
@@ -139,7 +145,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 				Status status = programmer.addFlow(node, flow);
 
 				if (status.isSuccess()) {
-					logger.info(String.format("install flow %s to node %s",
+					logger.debug(String.format("install flow %s to node %s",
 							flow, node));
 				} else {
 					logger.error(String.format(
@@ -250,46 +256,12 @@ public class SimpleTSAImpl implements ITrafficSteeringService {
 		return _currentPolicyChain;
 	}
 
-	private List<RawPolicyChain> generateInitialPolicyChains() {
-		List<RawPolicyChain> result = new LinkedList<RawPolicyChain>();
-		RawPolicyChain tmp = new RawPolicyChain();
-		tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.7]";
-		Match match = new Match();
-		match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
-				.shortValue()));
-		match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
-				.byteValue()));
-		try {
-			match.setField(new MatchField(MatchType.NW_DST, InetAddress
-					.getByName("10.0.0.7")));
+	@Override
+	public void onConfigurationChange(ConfigurationManager configurationManager) {
+		logger.info("Configuration policy chains changed - updating TSA!");
+		applyPolicyChain(getConfigPolicyChains());
+		_listener.sendPolicyChains();
 
-			_trafficClasses.put(tmp.trafficClass, match);
-
-			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.3"),
-					InetAddress.getByName("10.0.0.5"),
-					InetAddress.getByName("10.0.0.2"));
-
-			result.add(tmp);
-
-			tmp = new RawPolicyChain();
-			tmp.trafficClass = "OFMatch[eth_type=5,ip_proto=10,nw_dst=10.0.0.8]";
-			match = new Match();
-			match.setField(new MatchField(MatchType.DL_TYPE, EtherTypes.IPv4
-					.shortValue()));
-			match.setField(new MatchField(MatchType.NW_PROTO, IPProtocols.ICMP
-					.byteValue()));
-			match.setField(new MatchField(MatchType.NW_DST, InetAddress
-					.getByName("10.0.0.8")));
-			_trafficClasses.put(tmp.trafficClass, match);
-			tmp.chain = Arrays.asList(InetAddress.getByName("10.0.0.6"),
-					InetAddress.getByName("10.0.0.2"),
-					InetAddress.getByName("10.0.0.3"));
-			result.add(tmp);
-			return result;
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
-		}
-		return null;
 	}
 
 }

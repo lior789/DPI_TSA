@@ -33,7 +33,7 @@ public abstract class TSAListener {
 		}
 	}
 
-	private void sendPolicyChains() {
+	public void sendPolicyChains() {
 		List<RawPolicyChain> chains = _tsa.getPolicyChains();
 		try {
 			sendMessage(JsonUtils.toJson(new PolicyChainsData(chains)));
