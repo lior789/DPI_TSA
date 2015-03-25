@@ -25,13 +25,14 @@ public class ConfigurationManager {
 			.getLogger(ConfigurationManager.class);
 	private static Properties prop = new Properties();
 	private final String propFileName = "configuration/tsaConfig.properties";
-	private String chainsFileName;
+	private final String chainsFileName;
 	private ConfigChangedDelegation _delegation;
 
 	private ConfigurationManager() throws FileNotFoundException, IOException {
 		initialize();
 		chainsFileName = this.getProperty("tsa_policy_filename");
-		new Thread(new ConfigurationChangeListener(chainsFileName)).start();
+		if (chainsFileName != null)
+			new Thread(new ConfigurationChangeListener(chainsFileName)).start();
 	}
 
 	public static ConfigurationManager getInstance() {
@@ -61,10 +62,15 @@ public class ConfigurationManager {
 	}
 
 	public List<RawPolicyChain> getPolicyChainsConfig() {
+		if (chainsFileName == null)
+			return null;
+		File chainsFile = new File(chainsFileName);
+		if (!chainsFile.exists())
+			return null;
 		List<RawPolicyChain> result = null;
 		try {
 			SAXReader reader = new SAXReader();
-			Document document = reader.read(new File(chainsFileName));
+			Document document = reader.read(chainsFile);
 			Element rootElement = document.getRootElement();
 			result = new LinkedList<RawPolicyChain>();
 			for (Iterator i = rootElement.elementIterator(); i.hasNext();) {

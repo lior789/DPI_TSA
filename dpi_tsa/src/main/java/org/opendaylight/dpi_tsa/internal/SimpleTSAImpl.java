@@ -76,7 +76,11 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		_trafficClasses = new HashMap<String, Match>();
 		_config = ConfigurationManager.getInstance();
 		_config.setPolicyChangedDelegation(this);
-		applyPolicyChain(getConfigPolicyChains());
+		List<RawPolicyChain> configPolicyChains = getConfigPolicyChains();
+		if (configPolicyChains != null)
+			applyPolicyChain(configPolicyChains);
+		else
+			logger.warn("no initial tsa policy");
 		_listener.start();
 	}
 

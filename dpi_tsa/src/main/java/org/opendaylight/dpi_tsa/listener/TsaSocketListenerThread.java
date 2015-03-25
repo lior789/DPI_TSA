@@ -32,15 +32,35 @@ public class TsaSocketListenerThread extends Thread {
 		_running = true;
 		try {
 			_serverSocket = new ServerSocket();
-			ConfigurationManager config = ConfigurationManager.getInstance();
-			_serverSocket.bind(new InetSocketAddress(Inet4Address
-					.getByName(config.getProperty("listener.address")), Short
-					.valueOf(config.getProperty("listener.port"))));
 		} catch (IOException e) {
-			logger.error("Failed to start listener: " + e.getMessage());
-			e.printStackTrace();
+			logger.error("cant open server socket", e);
+		}
+
+		try {
+			waitForInterface();
+		} catch (InterruptedException e) {
+			this.interrupt();
 		}
 		waitForController();
+
+	}
+
+	private void waitForInterface() throws InterruptedException {
+		ConfigurationManager config = ConfigurationManager.getInstance();
+		logger.info("waiting for interface: "
+				+ config.getProperty("listener.address"));
+		boolean binded = false;
+		while (!binded) {
+			try {
+				_serverSocket.bind(new InetSocketAddress(Inet4Address
+						.getByName(config.getProperty("listener.address")),
+						Short.valueOf(config.getProperty("listener.port"))));
+				binded = true;
+
+			} catch (IOException e) {
+			}
+			sleep(500);
+		}
 	}
 
 	private void waitForController() {
