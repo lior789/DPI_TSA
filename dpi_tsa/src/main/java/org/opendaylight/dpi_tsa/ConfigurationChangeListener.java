@@ -18,6 +18,7 @@ public class ConfigurationChangeListener implements Runnable {
 		this.fullFilePath = filePath;
 	}
 
+	@Override
 	public void run() {
 		try {
 			register(this.fullFilePath);
@@ -41,6 +42,7 @@ public class ConfigurationChangeListener implements Runnable {
 		path.register(watchService, ENTRY_MODIFY);
 
 		Runtime.getRuntime().addShutdownHook(new Thread() {
+			@Override
 			public void run() {
 				try {
 					watchService.close();
@@ -51,8 +53,9 @@ public class ConfigurationChangeListener implements Runnable {
 		});
 
 		WatchKey key = null;
-		while (true) {
-			try {
+		try {
+			while (true) {
+
 				key = watchService.take();
 				for (WatchEvent<?> event : key.pollEvents()) {
 					if (event.context().toString().equals(configFileName)) {
@@ -64,9 +67,9 @@ public class ConfigurationChangeListener implements Runnable {
 					System.out.println("Could not reset the watch key.");
 					break;
 				}
-			} catch (Exception e) {
-				System.out.println("InterruptedException: " + e.getMessage());
 			}
+		} catch (Exception e) {
+			System.out.println("InterruptedException: " + e.getMessage());
 		}
 	}
 
