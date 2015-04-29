@@ -17,8 +17,6 @@
 
 package org.opendaylight.dpi_tsa.internal;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -26,18 +24,19 @@ import java.util.List;
 import java.util.Map;
 
 import org.opendaylight.controller.hosttracker.IfIptoHost;
+import org.opendaylight.controller.sal.action.Action;
+import org.opendaylight.controller.sal.action.Controller;
 import org.opendaylight.controller.sal.core.Node;
 import org.opendaylight.controller.sal.flowprogrammer.Flow;
 import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.sal.match.Match;
-import org.opendaylight.controller.sal.match.MatchField;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.sal.utils.EtherTypes;
-import org.opendaylight.controller.sal.utils.IPProtocols;
 import org.opendaylight.controller.sal.utils.Status;
 import org.opendaylight.controller.switchmanager.ISwitchManager;
+import org.opendaylight.controller.switchmanager.Switch;
 import org.opendaylight.controller.topologymanager.ITopologyManager;
 import org.opendaylight.dpi_tsa.ConfigChangedDelegation;
 import org.opendaylight.dpi_tsa.ConfigurationManager;
@@ -53,6 +52,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		ConfigChangedDelegation {
 	private static final Logger logger = LoggerFactory
 			.getLogger(SimpleTSAImpl.class);
+	private static final short ARP_PRIORITY = 8;
 	private ISwitchManager switchManager = null;
 	private IFlowProgrammerService programmer = null;
 	private IDataPacketService dataPacketService = null;
@@ -79,11 +79,30 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		_config.setPolicyChangedDelegation(this);
 		List<RawPolicyChain> configPolicyChains = getConfigPolicyChains();
 		_tsaGenerator = new TSAGenerator(routing, hostTracker, switchManager);
+		setArpFlow();
 		if (configPolicyChains != null)
 			applyPolicyChain(configPolicyChains);
 		else
 			logger.warn("no initial tsa policy");
 		_listener.start();
+	}
+
+	/*
+	 * this method set flow to send arp messages to controller with high
+	 * priority, this is done in order to keep the host tracker working with any
+	 * forwarding bundle
+	 */
+	private void setArpFlow() {
+		Match match = new Match();
+		match.setField(MatchType.DL_TYPE, EtherTypes.ARP.shortValue());
+		Action action = new Controller();
+		Flow flow = new Flow(match, Arrays.asList(action));
+		flow.setPriority(ARP_PRIORITY);
+		List<Switch> switches = switchManager.getNetworkDevices();
+		for (Switch switchI : switches) {
+			programmer.addFlow(switchI.getNode(), flow);
+		}
+		logger.info("arp flows added!");
 	}
 
 	private List<RawPolicyChain> getConfigPolicyChains() {
@@ -118,8 +137,6 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		removeFlows(_flows);
 		for (RawPolicyChain policyChain : policyChains) {
 			Match trafficMatch = FlowUtils.parseMatch(policyChain.trafficClass);
-			// Match trafficMatch =
-			// _trafficClasses.get(policyChain.trafficClass);
 			Map<Node, List<Flow>> chainsFlows = _tsaGenerator.generateRules(
 					policyChain.chain, trafficMatch);
 			programFlows(chainsFlows);
