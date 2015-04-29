@@ -64,6 +64,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 	private Map<String, Match> _trafficClasses;
 	private TSAListener _listener;
 	private ConfigurationManager _config;
+	private TSAGenerator _tsaGenerator;
 
 	/**
 	 * Function called by dependency manager after "init ()" is called and after
@@ -81,6 +82,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 			applyPolicyChain(configPolicyChains);
 		else
 			logger.warn("no initial tsa policy");
+		_tsaGenerator = new TSAGenerator(routing, hostTracker, switchManager);
 		_listener.start();
 	}
 
@@ -113,14 +115,12 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 			return;
 		}
 		logger.info("applying chain: " + policyChains);
-		TSAGenerator tsaGenerator = new TSAGenerator(routing, hostTracker,
-				switchManager);
 		removeFlows(_flows);
 		for (RawPolicyChain policyChain : policyChains) {
 			Match trafficMatch = FlowUtils.parseMatch(policyChain.trafficClass);
 			// Match trafficMatch =
 			// _trafficClasses.get(policyChain.trafficClass);
-			Map<Node, List<Flow>> chainsFlows = tsaGenerator.generateRules(
+			Map<Node, List<Flow>> chainsFlows = _tsaGenerator.generateRules(
 					policyChain.chain, trafficMatch);
 			programFlows(chainsFlows);
 			_flows.add(chainsFlows);
@@ -250,7 +250,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 
 	void unsetSwitchManager(ISwitchManager s) {
 		if (this.switchManager == s) {
-			logger.debug("SwitchManager removed!");
+			logger.error("SwitchManager removed!");
 			this.switchManager = null;
 		}
 	}
