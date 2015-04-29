@@ -32,6 +32,7 @@ import org.opendaylight.controller.sal.flowprogrammer.IFlowProgrammerService;
 import org.opendaylight.controller.sal.match.Match;
 import org.opendaylight.controller.sal.match.MatchType;
 import org.opendaylight.controller.sal.packet.IDataPacketService;
+import org.opendaylight.controller.sal.packet.PacketResult;
 import org.opendaylight.controller.sal.routing.IRouting;
 import org.opendaylight.controller.sal.utils.EtherTypes;
 import org.opendaylight.controller.sal.utils.Status;
@@ -79,7 +80,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 		_config.setPolicyChangedDelegation(this);
 		List<RawPolicyChain> configPolicyChains = getConfigPolicyChains();
 		_tsaGenerator = new TSAGenerator(routing, hostTracker, switchManager);
-		setArpFlow();
+		// setArpFlow();
 		if (configPolicyChains != null)
 			applyPolicyChain(configPolicyChains);
 		else
@@ -246,6 +247,7 @@ public class SimpleTSAImpl implements ITrafficSteeringService,
 
 	public void unsetFlowProgrammerService(IFlowProgrammerService s) {
 		if (this.programmer == s) {
+			logger.error("FlowProgrammer removed!");
 			this.programmer = null;
 		}
 	}
